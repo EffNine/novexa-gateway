@@ -27,6 +27,11 @@ Standard commands live in the `Makefile` and `README.md` (`make build|test|lint|
 - **Lint findings are pre-existing.** `make lint` (golangci-lint) runs but currently reports
   several pre-existing issues (errcheck, gofmt, gosec, govet shadow, revive). The tool works;
   these are not caused by environment setup.
+- **Route/alias keys containing a dot don't match.** Config is loaded via Viper, whose default
+  `.` key delimiter mangles map keys that contain a dot (e.g. a `routes:` or `aliases:` key like
+  `meta/llama-3.1-8b-instruct`). Such a route silently won't resolve. Use the provider-prefixed
+  Model ID from `/v1/models` instead (e.g. `nvidia_nim/meta/llama-3.1-8b-instruct`), which the
+  router strips and dispatches without needing a matching route entry.
 
 ### Local end-to-end testing without real provider keys
 
