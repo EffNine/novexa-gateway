@@ -107,6 +107,18 @@ func (e *Engine) Resolve(modelID string) (*ResolvedRoute, error) {
 		}, nil
 	}
 
+	// Provider-prefixed Model ID from /v1/models (e.g. nvidia_nim/meta/llama-3.1-8b-instruct)
+	if providerHint != "" {
+		if p, found := e.registry.Get(providerHint); found {
+			return &ResolvedRoute{
+				Provider:        p,
+				ProviderName:    providerHint,
+				ProviderModelID: baseID,
+				ModelID:         baseID,
+			}, nil
+		}
+	}
+
 	return nil, fmt.Errorf("model '%s' not found; add a route or use a provider-prefixed ID", modelID)
 }
 

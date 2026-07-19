@@ -299,35 +299,28 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("cost.currency", "USD")
 }
 
-// autoEnableProviders enables providers if their API key env vars are set
+// autoEnableProviders enables providers and fills API keys from well-known env vars.
+// Viper's NOVEXA_ prefix does not map OPENAI_API_KEY / NVIDIA_NIM_API_KEY / etc.,
+// so we hydrate those explicitly when the config field is empty.
 func autoEnableProviders(cfg *Config) {
-	if os.Getenv("OPENAI_API_KEY") != "" {
-		cfg.Providers.OpenAI.Enabled = true
+	hydrate := func(p *ProviderConfig, envKey string) {
+		if key := os.Getenv(envKey); key != "" {
+			p.Enabled = true
+			if p.APIKey == "" {
+				p.APIKey = key
+			}
+		}
 	}
-	if os.Getenv("ANTHROPIC_API_KEY") != "" {
-		cfg.Providers.Anthropic.Enabled = true
-	}
-	if os.Getenv("GEMINI_API_KEY") != "" {
-		cfg.Providers.Gemini.Enabled = true
-	}
-	if os.Getenv("DEEPSEEK_API_KEY") != "" {
-		cfg.Providers.DeepSeek.Enabled = true
-	}
-	if os.Getenv("OPENROUTER_API_KEY") != "" {
-		cfg.Providers.OpenRouter.Enabled = true
-	}
-	if os.Getenv("GROQ_API_KEY") != "" {
-		cfg.Providers.Groq.Enabled = true
-	}
-	if os.Getenv("OPENCODE_API_KEY") != "" {
-		cfg.Providers.Opencode.Enabled = true
-	}
-	if os.Getenv("NVIDIA_NIM_API_KEY") != "" {
-		cfg.Providers.NvidiaNim.Enabled = true
-	}
-	if os.Getenv("NOUS_PORTAL_API_KEY") != "" {
-		cfg.Providers.NousPortal.Enabled = true
-	}
+
+	hydrate(&cfg.Providers.OpenAI, "OPENAI_API_KEY")
+	hydrate(&cfg.Providers.Anthropic, "ANTHROPIC_API_KEY")
+	hydrate(&cfg.Providers.Gemini, "GEMINI_API_KEY")
+	hydrate(&cfg.Providers.DeepSeek, "DEEPSEEK_API_KEY")
+	hydrate(&cfg.Providers.OpenRouter, "OPENROUTER_API_KEY")
+	hydrate(&cfg.Providers.Groq, "GROQ_API_KEY")
+	hydrate(&cfg.Providers.Opencode, "OPENCODE_API_KEY")
+	hydrate(&cfg.Providers.NvidiaNim, "NVIDIA_NIM_API_KEY")
+	hydrate(&cfg.Providers.NousPortal, "NOUS_PORTAL_API_KEY")
 }
 
 // validate validates the configuration
