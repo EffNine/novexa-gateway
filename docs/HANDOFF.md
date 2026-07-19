@@ -23,46 +23,72 @@ Implementation plan is in [docs/PLAN.md](PLAN.md) with six vertical slices.
 
 ### Slice 1: Domain cleanup — COMPLETE
 - Renamed `internal/model` → `internal/apitypes`.
-- Split overloaded `model` field into Model ID / Provider Model ID across config, router, usage, and DB.
+- Split overloaded `model` field:
+  - `RouteConfig.Model` → `RouteConfig.ModelID`
+  - `FallbackConfig.Model` → `FallbackConfig.ModelID`
+  - `ResolvedRoute.Model` → `ResolvedRoute.ProviderModelID`
+  - Added `ResolvedRoute.ModelID`
+  - `usage.Record` and `database.UsageRecord` now store both `ModelID` and `ProviderModelID`.
+- Updated `config/config.example.yaml` to use `model_id`.
 - `go build ./...` passes.
 
 ### Slice 2: Provider interface expansion — COMPLETE
-- `ListModels` / `GetPricing` on `Provider`; OpenAI implemented; others stubbed with `ErrNotImplemented`.
-- `PricingInfo.UnitSize` clarifies per-N-unit pricing (e.g. per 1K tokens).
+- Added to `Provider` interface:
+  - `ListModels(ctx) ([]ModelInfo, error)`
+  - `GetPricing(ctx) (map[string]PricingInfo, error)`
+- Added domain types:
+  - `UnitType` (`UnitToken`, `UnitRequest`, `UnitMinute`, `UnitCharacter`)
+  - `ModelInfo`, `PricingInfo`
+  - `ErrNotImplemented` sentinel.
+- Implemented real `ListModels` and `GetPricing` for OpenAI provider.
+- Added stub implementations for anthropic, deepseek, gemini, generic, groq, lmstudio, ollama, openrouter.
+- Updated `cmd/gateway/main.go` to register all stub providers when enabled.
+- `go build ./...` passes.
 
 ### Slice 3: Merged `/v1/models` — COMPLETE
-- `internal/catalog` merges catalogs, prefixes duplicates, static `providers.*.models` fallback.
-- Aliases excluded from `/v1/models`; router strips provider prefixes on resolve.
+- Added `internal/catalog` aggregator: merges provider `ListModels`, qualifies duplicate base IDs with `provider/` prefixes, falls back to static `providers.*.models` when listing fails.
+- `/v1/models` uses the catalog; aliases are not advertised.
+- Router strips a registered provider prefix before route lookup and rejects prefix/provider mismatches.
+- Config: `ProviderConfig.Models` for Static Model List; example YAML updated for ollama/lmstudio.
+- Tests cover merge, prefixing, static fallback, alias exclusion, and prefix routing.
+- `go test ./...` and `go build ./...` pass.
 
 ### Slice 4: Usage/cost enhancements — COMPLETE
-- `usage.Estimator` precedence: actual per-request cost → `GetPricing` → manual `cost.rates` → unknown (nil, no invented default).
-- Usage schema: `Requests`, `DurationMs`, `InputChars`, `OutputChars`; tokens remain primary (0 for non-token).
-- DB `EstimatedCostUSD` is nullable; `CostSource` recorded.
-- `Tracker.Aggregate` returns totals + by-provider / by-model (ready for Slice 5 `/api/usage`).
-- Config: `cost.rates[]` with provider, provider_model_id, unit_type, unit_size, prices.
-- Tests cover pricing, actual override, manual fallback, unknown, extra counters, aggregation.
+- `usage.Estimator` resolves cost by precedence: per-request actual → `Provider.GetPricing` → manual config `cost.rates` → unknown (nil).
+- Extended `usage.Record` and `database.UsageRecord` with extra counters: `Requests`, `DurationMs`, `InputChars`, `OutputChars`; token fields remain primary and zero for non-token providers.
+- Added `CostSource` column to record which source produced the cost.
+- `usage.Tracker.Aggregate` returns totals and per-provider/per-model breakdowns.
+- Updated `Provider.PricingInfo` with `UnitSize` to avoid token pricing ambiguity.
+- Handler records embedding usage.
+- Tests cover pricing estimate, actual override, manual fallback, unknown cost, extra counters, and aggregation.
+- `go test ./...` and `go build ./...` pass.
+
+### Slice 5: Dashboard API endpoints — COMPLETE
+- `GET /api/models` returns the merged model catalog.
+- `GET /api/usage` returns totals plus `by_provider` and `by_model` breakdowns from the usage database.
+- `GET /api/health` returns per-provider liveness and latency (live provider checks).
+- `GET /api/logs` returns recent request logs from the database.
+- All dashboard endpoints are already protected by the same gateway API-key middleware that guards the OpenAI-compatible endpoints.
+- Tests cover `/api/usage` aggregation, `/api/logs`, `/api/models`, and API-key rejection.
 - `go test ./...` and `go build ./...` pass.
 
 ## Remaining work
 
-Slices 5–6 from [docs/PLAN.md](PLAN.md):
+Slice 6 from [docs/PLAN.md](PLAN.md):
 
-5. **Dashboard API endpoints** — wire `/api/models` (catalog), `/api/usage` (Aggregate), `/api/health`, `/api/logs`.
-6. **Documentation reconciliation** — rewrite README/docs to match actual capabilities.
+6. **Documentation reconciliation** — rewrite README/docs to match actual capabilities (provider support table, config vocabulary, request flow, dashboard scope).
 
 ## Important notes for the next agent
 
 - Always use the vocabulary from [CONTEXT.md](../CONTEXT.md); challenge any re-introduction of the ambiguous term `model`.
-- Router still has legacy auto-detect via `SupportsModel` when no route exists; CONTEXT says explicit-only.
-- Slice 5 should call `catalog.List` and `usage.Tracker.Aggregate` rather than reimplementing them.
-- Providers do not yet populate `ActualCostUSD` from upstream responses; the estimator path is ready when they do.
-- Provider prefixes in the model list are serialization-only; route config uses bare Model IDs.
+- Router still has legacy auto-detect via `SupportsModel` when no route exists; CONTEXT says routing should be explicit-only — consider removing auto-detect in a later slice.
+- Slice 6 is docs-only; no behavior changes needed beyond documenting what currently works.
+- `/api/usage/costs`, `/api/config`, and `/api/config/reload` remain stubs and should be documented as planned rather than implemented.
 
 ## Suggested skills for the next session
 
-- `tdd` — for test-first implementation of slice 5.
-- `review` — before merging.
-- `to-issues` — if remaining slices need separate tickets.
+- `tdd` — if any doc-driven behavior gaps surface during Slice 6.
+- `review` — before marking Slice 6 complete.
 
 ## Artifacts
 

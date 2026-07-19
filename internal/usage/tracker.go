@@ -160,7 +160,24 @@ type AggregateBucket struct {
 	CostUSD          *float64
 }
 
-// Aggregate returns usage totals and per-provider/per-model breakdowns.
+// Bucket is an alias for AggregateBucket for public dashboard use.
+type Bucket = AggregateBucket
+
+// Summary is an alias for AggregateSummary.
+type Summary = AggregateSummary
+
+// AggregateUsage aggregates rows directly (used by handlers without a Tracker).
+func Aggregate(rows []database.UsageRecord) (Bucket, map[string]Bucket, map[string]Bucket) {
+	total := Bucket{}
+	byProvider := map[string]Bucket{}
+	byModel := map[string]Bucket{}
+	for _, row := range rows {
+		total = addBucket(total, row)
+		byProvider[row.Provider] = addBucket(byProvider[row.Provider], row)
+		byModel[row.ModelID] = addBucket(byModel[row.ModelID], row)
+	}
+	return total, byProvider, byModel
+}
 func (t *Tracker) Aggregate(q AggregateQuery) (*AggregateSummary, error) {
 	if t == nil || t.db == nil {
 		return &AggregateSummary{

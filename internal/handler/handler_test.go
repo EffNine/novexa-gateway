@@ -1,7 +1,6 @@
 package handler_test
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"net/http/httptest"
@@ -36,7 +35,8 @@ func TestListModelsExcludesAliases(t *testing.T) {
 	}
 	engine := router.NewEngine(cfg, reg)
 	cat := catalog.New(reg, nil)
-	h := handler.New(engine, reg, nil, zap.NewNop(), cat)
+	db := openTestDB(t)
+	h := handler.New(engine, reg, nil, zap.NewNop(), cat, db)
 
 	app := fiber.New()
 	h.Register(app)
@@ -76,36 +76,3 @@ func TestListModelsExcludesAliases(t *testing.T) {
 		t.Fatalf("missing gpt-4o in %v", ids)
 	}
 }
-
-type stubProvider struct {
-	name   string
-	models []provider.ModelInfo
-}
-
-func (s *stubProvider) Name() string { return s.name }
-
-func (s *stubProvider) ChatCompletion(context.Context, *apitypes.ChatCompletionRequest) (*apitypes.ChatCompletionResponse, error) {
-	return nil, provider.ErrNotImplemented
-}
-
-func (s *stubProvider) ChatCompletionStream(context.Context, *apitypes.ChatCompletionRequest) (<-chan apitypes.StreamChunk, error) {
-	return nil, provider.ErrNotImplemented
-}
-
-func (s *stubProvider) Embeddings(context.Context, *apitypes.EmbeddingRequest) (*apitypes.EmbeddingResponse, error) {
-	return nil, provider.ErrNotImplemented
-}
-
-func (s *stubProvider) ListModels(context.Context) ([]provider.ModelInfo, error) {
-	return s.models, nil
-}
-
-func (s *stubProvider) GetPricing(context.Context) (map[string]provider.PricingInfo, error) {
-	return nil, provider.ErrNotImplemented
-}
-
-func (s *stubProvider) HealthCheck(context.Context) (*provider.HealthStatus, error) {
-	return &provider.HealthStatus{Provider: s.name, IsHealthy: true}, nil
-}
-
-func (s *stubProvider) SupportsModel(string) bool { return false }

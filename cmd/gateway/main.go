@@ -97,7 +97,7 @@ func main() {
 	middleware.Register(app, cfg, authService, logger)
 
 	// Register handlers
-	h := handler.New(routerEngine, registry, usageTracker, logger, modelCatalog)
+	h := handler.New(routerEngine, registry, usageTracker, logger, modelCatalog, db)
 	h.Register(app)
 
 	// Graceful shutdown

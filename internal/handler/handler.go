@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/novexa/gateway/internal/apitypes"
 	"github.com/novexa/gateway/internal/catalog"
+	"github.com/novexa/gateway/internal/database"
 	"github.com/novexa/gateway/internal/provider"
 	"github.com/novexa/gateway/internal/router"
 	"github.com/novexa/gateway/internal/usage"
@@ -22,17 +24,19 @@ type Handler struct {
 	registry     *provider.Registry
 	catalog      *catalog.Catalog
 	usageTracker *usage.Tracker
+	db           *database.Database
 	logger       *zap.Logger
 	startTime    time.Time
 }
 
 // New creates a new Handler
-func New(r *router.Engine, reg *provider.Registry, ut *usage.Tracker, logger *zap.Logger, cat *catalog.Catalog) *Handler {
+func New(r *router.Engine, reg *provider.Registry, ut *usage.Tracker, logger *zap.Logger, cat *catalog.Catalog, db *database.Database) *Handler {
 	return &Handler{
 		router:       r,
 		registry:     reg,
 		catalog:      cat,
 		usageTracker: ut,
+		db:           db,
 		logger:       logger,
 		startTime:    time.Now(),
 	}
@@ -49,6 +53,7 @@ func (h *Handler) Register(app *fiber.App) {
 	app.Get("/health", h.HandleHealth)
 
 	// Dashboard endpoints
+	app.Get("/api/models", h.HandleDashboardModels)
 	app.Get("/api/health", h.HandleProviderHealth)
 	app.Get("/api/providers", h.HandleListProviders)
 	app.Get("/api/usage", h.HandleUsage)
@@ -257,6 +262,21 @@ func (h *Handler) HandleListModels(c *fiber.Ctx) error {
 	})
 }
 
+// HandleDashboardModels handles GET /api/models
+func (h *Handler) HandleDashboardModels(c *fiber.Ctx) error {
+	entries, err := h.catalog.List(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fiber.Map{
+				"message": "Failed to list models",
+				"type":    "server_error",
+				"code":    "catalog_error",
+			},
+		})
+	}
+	return c.JSON(fiber.Map{"models": entries})
+}
+
 // HandleEmbeddings handles POST /v1/embeddings
 func (h *Handler) HandleEmbeddings(c *fiber.Ctx) error {
 	var req apitypes.EmbeddingRequest
@@ -284,11 +304,19 @@ func (h *Handler) HandleEmbeddings(c *fiber.Ctx) error {
 	}
 
 	req.Model = resolved.ProviderModelID
+	start := time.Now()
 	resp, err := resolved.Provider.Embeddings(c.Context(), &req)
 	if err != nil {
+		h.trackUsage(uuid.New().String(), resolved.ModelID, resolved.ProviderModelID, resolved.ProviderName, nil, time.Since(start), fiber.StatusBadGateway, false, err)
 		return h.providerErrorResponse(c, err)
 	}
 
+	usageData := &apitypes.Usage{
+		PromptTokens:     resp.Usage.PromptTokens,
+		CompletionTokens: resp.Usage.CompletionTokens,
+		TotalTokens:      resp.Usage.TotalTokens,
+	}
+	h.trackUsage(uuid.New().String(), resolved.ModelID, resolved.ProviderModelID, resolved.ProviderName, usageData, time.Since(start), fiber.StatusOK, false, nil)
 	return c.JSON(resp)
 }
 
@@ -339,17 +367,41 @@ func (h *Handler) HandleListProviders(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"providers": info})
 }
 
+// UsageSummary is the response shape for GET /api/usage.
+type UsageSummary struct {
+	Total      usage.Bucket            `json:"total"`
+	ByProvider map[string]usage.Bucket `json:"by_provider"`
+	ByModel    map[string]usage.Bucket `json:"by_model"`
+}
+
 // HandleUsage handles GET /api/usage
 func (h *Handler) HandleUsage(c *fiber.Ctx) error {
-	// TODO: Implement usage querying from database
-	return c.JSON(fiber.Map{
-		"message": "Usage tracking endpoint - coming soon",
-	})
+	if h.db == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": fiber.Map{
+				"message": "Usage database not available",
+				"type":    "server_error",
+			},
+		})
+	}
+
+	limit := defaultLimit(c.Query("limit"), 1000)
+	var records []database.UsageRecord
+	if err := h.db.DB.Order("created_at DESC").Limit(limit).Find(&records).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fiber.Map{
+				"message": "Failed to query usage",
+				"type":    "server_error",
+			},
+		})
+	}
+
+	total, byProvider, byModel := usage.Aggregate(records)
+	return c.JSON(UsageSummary{Total: total, ByProvider: byProvider, ByModel: byModel})
 }
 
 // HandleCosts handles GET /api/usage/costs
 func (h *Handler) HandleCosts(c *fiber.Ctx) error {
-	// TODO: Implement cost querying from database
 	return c.JSON(fiber.Map{
 		"message": "Cost tracking endpoint - coming soon",
 	})
@@ -357,10 +409,37 @@ func (h *Handler) HandleCosts(c *fiber.Ctx) error {
 
 // HandleLogs handles GET /api/logs
 func (h *Handler) HandleLogs(c *fiber.Ctx) error {
-	// TODO: Implement log querying from database
-	return c.JSON(fiber.Map{
-		"message": "Logs endpoint - coming soon",
-	})
+	if h.db == nil {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
+			"error": fiber.Map{
+				"message": "Database not available",
+				"type":    "server_error",
+			},
+		})
+	}
+
+	limit := defaultLimit(c.Query("limit"), 100)
+	var logs []database.RequestLog
+	if err := h.db.DB.Order("created_at DESC").Limit(limit).Find(&logs).Error; err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": fiber.Map{
+				"message": "Failed to query logs",
+				"type":    "server_error",
+			},
+		})
+	}
+	return c.JSON(fiber.Map{"logs": logs})
+}
+
+func defaultLimit(q string, fallback int) int {
+	if q == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(q)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
 }
 
 // HandleConfig handles GET /api/config
