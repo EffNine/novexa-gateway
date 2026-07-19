@@ -1,26 +1,20 @@
 # Configuration Reference
 
-Novexa Gateway uses a hierarchical configuration system with environment variables taking precedence over YAML files.
+Novexa Gateway uses environment variables first, then YAML, then defaults.
 
-## Configuration Priority
+## Priority
 
-1. **Environment variables** (highest priority)
-2. **YAML config file** (if provided)
-3. **Default values** (lowest priority)
+1. Environment variables (`NOVEXA_*` or provider-specific keys)
+2. YAML config file
+3. Default values
 
 ## Environment Variables
-
-All configuration values can be set via environment variables using the pattern:
-
-```
-NOVEXA_<SECTION>_<KEY>
-```
 
 ### Core Settings
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `NOVEXA_API_KEY` | Gateway API key for client authentication | - | **Yes** |
+| `NOVEXA_API_KEY` | Gateway API key for client authentication | — | **Yes** |
 | `NOVEXA_SERVER_PORT` | HTTP server port | `8080` | No |
 | `NOVEXA_SERVER_HOST` | HTTP server host | `0.0.0.0` | No |
 | `NOVEXA_SERVER_READ_TIMEOUT` | Request read timeout | `30s` | No |
@@ -37,19 +31,6 @@ NOVEXA_<SECTION>_<KEY>
 | `DEEPSEEK_API_KEY` | DeepSeek API key |
 | `OPENROUTER_API_KEY` | OpenRouter API key |
 | `GROQ_API_KEY` | Groq API key |
-
-### Provider Base URLs (Optional)
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_BASE_URL` | OpenAI API base URL | `https://api.openai.com/v1` |
-| `ANTHROPIC_BASE_URL` | Anthropic API base URL | `https://api.anthropic.com` |
-| `GEMINI_BASE_URL` | Gemini API base URL | `https://generativelanguage.googleapis.com/v1beta` |
-| `DEEPSEEK_BASE_URL` | DeepSeek API base URL | `https://api.deepseek.com/v1` |
-| `OPENROUTER_BASE_URL` | OpenRouter API base URL | `https://openrouter.ai/api/v1` |
-| `GROQ_BASE_URL` | Groq API base URL | `https://api.groq.com/openai/v1` |
-| `OLLAMA_BASE_URL` | Ollama API base URL | `http://localhost:11434` |
-| `LMSTUDIO_BASE_URL` | LM Studio API base URL | `http://localhost:1234/v1` |
 
 ### Database Settings
 
@@ -71,19 +52,18 @@ NOVEXA_<SECTION>_<KEY>
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `NOVEXA_RATELIMIT_GLOBAL_RPM` | Global requests per minute | `1000` |
-| `NOVEXA_RATELIMIT_PERPROVIDER_RPM` | Per-provider requests per minute | `100` |
+| `NOVEXA_RATE_LIMIT_GLOBAL_REQUESTS_PER_MINUTE` | Global requests per minute | `1000` |
+| `NOVEXA_RATE_LIMIT_PER_PROVIDER_REQUESTS_PER_MINUTE` | Per-provider requests per minute | `100` |
 
 ### Health Monitoring
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `NOVEXA_HEALTH_CHECK_INTERVAL` | Health check interval | `60s` |
-| `NOVEXA_HEALTH_CHECK_TIMEOUT` | Health check timeout | `10s` |
+| `NOVEXA_HEALTH_TIMEOUT` | Health check timeout | `10s` |
+| `NOVEXA_HEALTH_UNHEALTHY_THRESHOLD` | Consecutive failures before unhealthy | `3` |
 
 ## YAML Configuration File
-
-Create a `config.yaml` file for advanced configuration:
 
 ```yaml
 # Server configuration
@@ -110,88 +90,92 @@ providers:
     base_url: "https://api.openai.com/v1"
     timeout: 60s
     max_retries: 3
-  
+
   anthropic:
-    enabled: true
+    enabled: false
     api_key: "${ANTHROPIC_API_KEY}"
     base_url: "https://api.anthropic.com"
     timeout: 60s
     max_retries: 3
-  
+
   gemini:
-    enabled: true
+    enabled: false
     api_key: "${GEMINI_API_KEY}"
     base_url: "https://generativelanguage.googleapis.com/v1beta"
     timeout: 60s
     max_retries: 3
-  
+
   deepseek:
-    enabled: true
+    enabled: false
     api_key: "${DEEPSEEK_API_KEY}"
     base_url: "https://api.deepseek.com/v1"
     timeout: 60s
     max_retries: 3
-  
+
   openrouter:
-    enabled: true
+    enabled: false
     api_key: "${OPENROUTER_API_KEY}"
     base_url: "https://openrouter.ai/api/v1"
     timeout: 60s
     max_retries: 3
-  
+
   groq:
-    enabled: true
+    enabled: false
     api_key: "${GROQ_API_KEY}"
     base_url: "https://api.groq.com/openai/v1"
     timeout: 30s
     max_retries: 3
-  
+
   ollama:
     enabled: false
     base_url: "http://localhost:11434"
     timeout: 120s
     max_retries: 1
-  
+    models:
+      - "llama3.1:8b"
+
   lmstudio:
     enabled: false
     base_url: "http://localhost:1234/v1"
     timeout: 120s
     max_retries: 1
+    models:
+      - "loaded-model-name"
 
-# Model routing (optional - auto-detected if not specified)
+# Model routing
 routes:
   "gpt-4o":
     provider: openai
   "gpt-4o-mini":
     provider: openai
-  "claude-sonnet-4-20250514":
+  "claude-sonnet":
     provider: anthropic
-  "claude-3-5-haiku-20241022":
-    provider: anthropic
-  "gemini-2.5-pro":
-    provider: gemini
-  "gemini-2.5-flash":
-    provider: gemini
-  "deepseek-chat":
-    provider: deepseek
-  "deepseek-reasoner":
-    provider: deepseek
+    model_id: "claude-3-5-sonnet-20241022"
 
-# Model aliases (optional)
+# Aliases (not advertised in /v1/models)
 aliases:
   "fast": "gpt-4o-mini"
   "smart": "gpt-4o"
   "coding": "deepseek-chat"
-  "cheap": "gpt-4o-mini"
 
-# Fallback chains (optional)
+# Fallback chains
 fallbacks:
   "deepseek-chat":
     - provider: deepseek
     - provider: openrouter
-      model: "deepseek/deepseek-chat"
-    - provider: groq
-      model: "deepseek-r1-distill-llama-70b"
+      model_id: "deepseek/deepseek-chat"
+
+# Cost estimation
+cost:
+  enabled: true
+  currency: "USD"
+  rates:
+    - provider: openai
+      model_id: "gpt-4o"
+      unit: token
+      unit_size: 1000
+      input_usd: 0.0025
+      output_usd: 0.010
 
 # Retry configuration
 retry:
@@ -232,44 +216,28 @@ health:
 # Usage tracking
 usage:
   enabled: true
-
-# Cost tracking
-cost:
-  enabled: true
-  currency: "USD"
 ```
 
-## Minimal Configuration Example
+## Minimal Configuration
 
-For the simplest setup, only provider API keys are required:
+For the simplest setup, only the gateway key and provider keys are required:
 
 ```bash
 export NOVEXA_API_KEY=your-secret-gateway-key
 export OPENAI_API_KEY=sk-your-openai-key
 ```
 
-The gateway will:
-- Start on port 8080
-- Enable OpenAI provider
-- Auto-discover available models
-- Use SQLite for storage
-- Use sensible defaults for all other settings
+The gateway will start on port 8080, enable OpenAI, and use SQLite with sensible defaults.
 
 ## Configuration Validation
 
-The gateway validates configuration on startup and will exit with an error if:
+Startup fails if:
+
 - `NOVEXA_API_KEY` is not set
-- No providers are configured
-- Invalid timeout values
-- Invalid log level
+- Server port is invalid
+- Logging level/format is invalid
+- Database driver is unsupported
 
-## Hot Reload
+## Configuration Reload
 
-Configuration can be reloaded without restarting the gateway:
-
-```bash
-curl -X PUT http://localhost:8080/api/config/reload \
-  -H "Authorization: Bearer your-secret-gateway-key"
-```
-
-Note: Provider API key changes require a restart.
+`/api/config/reload` is currently a stub and returns a success message without reloading configuration. A restart is required for provider API key and structural config changes.

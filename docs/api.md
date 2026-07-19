@@ -1,10 +1,10 @@
 # API Reference
 
-Novexa Gateway exposes an OpenAI-compatible API along with dashboard endpoints for monitoring.
+Novexa Gateway exposes an OpenAI-compatible API plus dashboard endpoints for monitoring.
 
 ## Authentication
 
-All endpoints require authentication via the `Authorization` header:
+All endpoints except `GET /health` require authentication via the `Authorization` header:
 
 ```
 Authorization: Bearer <your-api-key>
@@ -96,7 +96,7 @@ data: [DONE]
 
 **Endpoint**: `GET /v1/models`
 
-Lists all available models.
+Lists all available models from configured providers.
 
 #### Response
 
@@ -108,19 +108,19 @@ Lists all available models.
       "id": "gpt-4o",
       "object": "model",
       "created": 1677652288,
-      "owned_by": "novexa"
+      "owned_by": "openai"
     },
     {
-      "id": "claude-sonnet-4-20250514",
+      "id": "openai/llama3-8b",
       "object": "model",
       "created": 1677652288,
-      "owned_by": "novexa"
+      "owned_by": "openai"
     }
   ]
 }
 ```
 
-**Note**: The `owned_by` field is always `"novexa"` to hide the actual provider.
+**Note**: `owned_by` reflects the provider or the upstream owner when reported. Duplicate base model IDs across providers are qualified with a provider prefix.
 
 ---
 
@@ -151,7 +151,7 @@ Creates an embedding vector representing the input text.
   "data": [
     {
       "object": "embedding",
-      "embedding": [0.0023, -0.009, 0.015, ...],
+      "embedding": [0.0023, -0.009, 0.015],
       "index": 0
     }
   ],
@@ -166,6 +166,37 @@ Creates an embedding vector representing the input text.
 ---
 
 ## Dashboard Endpoints
+
+All dashboard endpoints require the gateway API key.
+
+### Merged Model Catalog
+
+**Endpoint**: `GET /api/models`
+
+Returns the merged model catalog from all configured providers.
+
+#### Response
+
+```json
+{
+  "models": [
+    {
+      "provider": "openai",
+      "model_id": "gpt-4o",
+      "provider_model_id": "gpt-4o",
+      "owned_by": "openai"
+    },
+    {
+      "provider": "groq",
+      "model_id": "groq/llama3-8b",
+      "provider_model_id": "llama3-8b",
+      "owned_by": "meta"
+    }
+  ]
+}
+```
+
+---
 
 ### Health Check
 
@@ -187,7 +218,7 @@ Simple health check (no authentication required).
 
 **Endpoint**: `GET /api/health`
 
-Returns health status of all configured providers.
+Returns live health status of all registered providers.
 
 #### Response
 
@@ -200,13 +231,6 @@ Returns health status of all configured providers.
       "latency_ms": 245,
       "last_error": null,
       "checked_at": "2026-07-19T10:30:00Z"
-    },
-    {
-      "name": "anthropic",
-      "healthy": false,
-      "latency_ms": 0,
-      "last_error": "connection timeout",
-      "checked_at": "2026-07-19T10:30:00Z"
     }
   ]
 }
@@ -218,7 +242,7 @@ Returns health status of all configured providers.
 
 **Endpoint**: `GET /api/providers`
 
-Lists all configured providers with their status.
+Lists all registered providers.
 
 #### Response
 
@@ -227,10 +251,7 @@ Lists all configured providers with their status.
   "providers": [
     {
       "name": "openai",
-      "enabled": true,
-      "base_url": "https://api.openai.com/v1",
-      "healthy": true,
-      "models_count": 12
+      "enabled": true
     }
   ]
 }
@@ -242,49 +263,50 @@ Lists all configured providers with their status.
 
 **Endpoint**: `GET /api/usage`
 
-Returns usage statistics with optional filters.
+Returns total and per-provider/per-model usage with estimated cost.
 
 #### Query Parameters
 
-- `from` (string): Start date (ISO 8601). Default: 24 hours ago
-- `to` (string): End date (ISO 8601). Default: now
-- `model` (string): Filter by model
-- `provider` (string): Filter by provider
+- `limit` (number): Maximum number of recent usage records to aggregate. Default: `1000`
 
 #### Response
 
 ```json
 {
-  "period": {
-    "from": "2026-07-18T10:30:00Z",
-    "to": "2026-07-19T10:30:00Z"
-  },
-  "summary": {
-    "total_requests": 150,
-    "total_tokens": 45000,
+  "total": {
+    "requests": 150,
     "prompt_tokens": 30000,
     "completion_tokens": 15000,
-    "total_cost_usd": 0.45,
-    "avg_latency_ms": 1200
+    "total_tokens": 45000,
+    "duration_ms": 180000,
+    "input_chars": 0,
+    "output_chars": 0,
+    "cost_usd": 0.45
   },
-  "by_model": [
-    {
-      "model": "gpt-4o",
+  "by_model": {
+    "gpt-4o": {
       "requests": 80,
-      "tokens": 24000,
+      "prompt_tokens": 20000,
+      "completion_tokens": 10000,
+      "total_tokens": 30000,
+      "duration_ms": 96000,
       "cost_usd": 0.30
     }
-  ],
-  "by_provider": [
-    {
-      "provider": "openai",
+  },
+  "by_provider": {
+    "openai": {
       "requests": 80,
-      "tokens": 24000,
+      "prompt_tokens": 20000,
+      "completion_tokens": 10000,
+      "total_tokens": 30000,
+      "duration_ms": 96000,
       "cost_usd": 0.30
     }
-  ]
+  }
 }
 ```
+
+**Note**: `cost_usd` is omitted when no cost source is available.
 
 ---
 
@@ -294,37 +316,15 @@ Returns usage statistics with optional filters.
 
 Returns detailed cost breakdown.
 
-#### Query Parameters
-
-- `period` (string): Time period (`day`, `week`, `month`). Default: `day`
-- `provider` (string): Filter by provider
-- `model` (string): Filter by model
-
 #### Response
 
 ```json
 {
-  "period": "day",
-  "total_cost_usd": 0.45,
-  "currency": "USD",
-  "breakdown": [
-    {
-      "date": "2026-07-19",
-      "cost_usd": 0.45,
-      "by_provider": [
-        {
-          "provider": "openai",
-          "cost_usd": 0.30
-        },
-        {
-          "provider": "anthropic",
-          "cost_usd": 0.15
-        }
-      ]
-    }
-  ]
+  "message": "Cost tracking endpoint - coming soon"
 }
 ```
+
+**Note**: This endpoint is currently a stub.
 
 ---
 
@@ -336,9 +336,7 @@ Returns recent request logs.
 
 #### Query Parameters
 
-- `limit` (number): Number of logs to return. Default: 100, Max: 1000
-- `offset` (number): Offset for pagination. Default: 0
-- `status` (string): Filter by status (`success`, `error`)
+- `limit` (number): Number of logs to return. Default: `100`, Max: `1000`
 
 #### Response
 
@@ -347,20 +345,18 @@ Returns recent request logs.
   "logs": [
     {
       "id": "log-abc123",
-      "timestamp": "2026-07-19T10:30:00Z",
+      "request_id": "req-abc123",
       "method": "POST",
       "path": "/v1/chat/completions",
-      "model": "gpt-4o",
-      "provider": "openai",
       "status_code": 200,
+      "client_ip": "127.0.0.1",
+      "user_agent": "curl/8.0",
+      "provider": "openai",
+      "model": "gpt-4o",
       "latency_ms": 1200,
-      "tokens": 150,
-      "cost_usd": 0.003
+      "created_at": "2026-07-19T10:30:00Z"
     }
-  ],
-  "total": 150,
-  "limit": 100,
-  "offset": 0
+  ]
 }
 ```
 
@@ -376,35 +372,17 @@ Returns current configuration (secrets redacted).
 
 ```json
 {
-  "server": {
-    "port": 8080,
-    "host": "0.0.0.0"
-  },
-  "providers": {
-    "openai": {
-      "enabled": true,
-      "base_url": "https://api.openai.com/v1",
-      "api_key": "***"
-    }
-  },
-  "routes": {
-    "gpt-4o": {
-      "provider": "openai"
-    }
-  },
-  "aliases": {
-    "fast": "gpt-4o-mini"
-  }
+  "message": "Config endpoint - coming soon"
 }
 ```
+
+**Note**: This endpoint is currently a stub.
 
 ---
 
 ### Reload Configuration
 
 **Endpoint**: `PUT /api/config/reload`
-
-Reloads configuration from file and environment variables.
 
 #### Response
 
@@ -415,7 +393,7 @@ Reloads configuration from file and environment variables.
 }
 ```
 
-**Note**: Provider API key changes require a restart.
+**Note**: This endpoint is currently a stub and does not reload configuration. A restart is required.
 
 ---
 
@@ -440,21 +418,10 @@ All errors follow the OpenAI error format:
 |-------------|------|-------------|
 | 400 | `invalid_request_error` | Invalid request format or parameters |
 | 401 | `authentication_error` | Invalid or missing API key |
-| 403 | `permission_error` | API key doesn't have permission |
-| 404 | `not_found_error` | Resource not found |
 | 429 | `rate_limit_error` | Rate limit exceeded |
 | 500 | `server_error` | Internal server error |
 | 502 | `provider_error` | Provider returned an error |
 | 503 | `service_unavailable` | Service temporarily unavailable |
-
-### Common Error Codes
-
-- `model_not_found`: Specified model doesn't exist
-- `invalid_api_key`: API key is invalid
-- `rate_limit_exceeded`: Too many requests
-- `provider_unavailable`: Provider is down or unreachable
-- `invalid_request`: Request format is invalid
-- `context_length_exceeded`: Input too long for model
 
 ---
 
@@ -478,11 +445,6 @@ When rate limited, returns:
 ```
 
 HTTP Status: `429 Too Many Requests`
-
-Headers:
-- `X-RateLimit-Limit`: Maximum requests allowed
-- `X-RateLimit-Remaining`: Requests remaining
-- `X-RateLimit-Reset`: Time when limit resets (Unix timestamp)
 
 ---
 
@@ -533,30 +495,35 @@ curl http://localhost:8080/v1/chat/completions \
   --no-buffer
 ```
 
-### Using Model Alias
+### Embeddings
 
 ```bash
-curl http://localhost:8080/v1/chat/completions \
+curl http://localhost:8080/v1/embeddings \
   -H "Authorization: Bearer your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "fast",
-    "messages": [
-      {"role": "user", "content": "Hello!"}
-    ]
+    "model": "text-embedding-3-small",
+    "input": "Hello world"
   }'
 ```
 
-### Get Usage Statistics
-
-```bash
-curl "http://localhost:8080/api/usage?period=day" \
-  -H "Authorization: Bearer your-api-key"
-```
-
-### Get Provider Health
+### Dashboard: Provider Health
 
 ```bash
 curl http://localhost:8080/api/health \
+  -H "Authorization: Bearer your-api-key"
+```
+
+### Dashboard: Usage
+
+```bash
+curl http://localhost:8080/api/usage \
+  -H "Authorization: Bearer your-api-key"
+```
+
+### Dashboard: Logs
+
+```bash
+curl "http://localhost:8080/api/logs?limit=50" \
   -H "Authorization: Bearer your-api-key"
 ```

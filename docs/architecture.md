@@ -2,103 +2,110 @@
 
 ## Overview
 
-Novexa Gateway is a single-user, self-hosted AI gateway that exposes an OpenAI-compatible API while routing requests to multiple AI providers transparently.
+Novexa Gateway is a single-operator, self-hosted AI gateway. It exposes an OpenAI-compatible API and routes requests to one or more configured upstream providers using explicit routes.
 
 ## System Architecture
 
 ```
-Client (VSCode, Claude Code, mobile apps, etc.)
+Client (VS Code, Claude Code, Open WebUI, custom apps)
     │
     ▼
-┌─────────────────────────────────────────────┐
-│         Novexa Gateway (Go/Fiber)            │
-│                                              │
-│  API Key Check → Rate Limit → Validate       │
-│       → Route → Provider Adapter             │
-│       → Normalize → Usage Track → Response   │
-│                                              │
-│  ┌─────────────────────────────────────────┐ │
-│  │  Providers: OpenAI, Anthropic, Gemini,  │ │
-│  │  DeepSeek, OpenRouter, Groq, Ollama,    │ │
-│  │  LM Studio, Generic                     │ │
-│  └─────────────────────────────────────────┘ │
-│                                              │
-│  SQLite (usage, costs, health, logs)         │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│                Novexa Gateway (Go/Fiber)              │
+│                                                     │
+│  API Key Check → Rate Limit → Validate → Route      │
+│       → Provider Adapter → Normalize → Response     │
+│                                                     │
+│  Catalog: merges provider model lists, qualifies    │
+│           duplicates with provider prefixes         │
+│                                                     │
+│  Usage Tracker: records tokens, counters, latency,  │
+│                 cost source to SQLite               │
+│                                                     │
+│  SQLite (usage, logs, health records)               │
+└─────────────────────────────────────────────────────┘
 ```
 
 ## Key Design Decisions
 
-### Single-User Model
-- Single API key via `NOVEXA_API_KEY` environment variable
-- No user management or authentication complexity
-- Operator is the only user
+### Single-Operator Model
+
+- One gateway API key via `NOVEXA_API_KEY`
+- No user management
+- Operator owns all upstream provider keys
 
 ### Provider Abstraction
+
 - All providers implement a common `Provider` interface
-- Each provider is a separate package with translation logic
-- Adding a new provider requires only implementing the interface
-- No provider-specific code outside adapter packages
+- Currently only the **OpenAI** adapter is fully implemented
+- Anthropic, Gemini, DeepSeek, OpenRouter, Groq, Ollama, LM Studio, and Generic are registered as stubs
 
-### Configuration-Driven Routing
-- All model→provider mappings defined in YAML config
-- Environment variable overrides for all settings
-- Zero hardcoded routing logic
-- Sensible defaults for minimal configuration
+### Explicit Routing
 
-### Streaming via SSE Proxy
-- Real-time streaming without buffering full responses
-- Provider-specific SSE formats normalized to OpenAI format
-- Goroutine per stream with context cancellation
+- The gateway does not auto-select a provider for an unmatched Model ID
+- Resolution order: alias → configured route → provider-prefixed route
+- Provider prefixes in `/v1/models` are stripped before route lookup
 
-### SQLite-First Storage
-- SQLite for usage tracking, costs, health, and logs
-- Perfect for single-user local deployment
-- PostgreSQL available as opt-in for advanced users
-- WAL mode for concurrent read/write
+### Catalog
 
-### Async Usage Tracking
-- Usage records written directly to SQLite (no batching needed at <1K req/day)
-- No latency impact on request path
-- Cost estimation calculated on write
+- `/v1/models` queries each provider's `ListModels`
+- Duplicate base Model IDs are qualified with `provider/model-id`
+- Providers without dynamic listing use the static `models` list from config
+- Aliases are never advertised in the catalog
+
+### Usage and Cost
+
+- Primary counters are OpenAI-style tokens
+- Extra counters (`requests`, `duration_ms`, `input_chars`, `output_chars`) support non-token providers
+- Cost estimation precedence:
+  1. Per-request actual cost from provider
+  2. Provider `GetPricing`
+  3. Manual `cost.rates` from config
+  4. Unknown (omitted/null, no invented default)
+- All cost values are USD
+
+### Storage
+
+- SQLite is the default database
+- Usage records, request logs, and provider health records are persisted
+- WAL mode is enabled for SQLite
 
 ## Request Lifecycle
 
 1. Client sends `POST /v1/chat/completions` with `Authorization: Bearer <key>`
 2. API key middleware validates against `NOVEXA_API_KEY`
 3. Rate limiter checks global and per-provider limits
-4. Request validator checks payload structure and size
-5. Router reads `model` field → resolves alias → resolves route → selects provider
-6. If fallback chain configured, router prepares ordered provider list
-7. Provider adapter translates OpenAI request → provider-native format (if needed)
-8. Provider adapter sends HTTP request to provider
-9. Response is normalized back to OpenAI format
-10. Usage tracker records tokens, latency, cost
-11. Normalized response returned to client
+4. Request validator checks payload structure
+5. Router resolves `model`:
+   - Strip registered provider prefix if present
+   - Resolve alias if exact match
+   - Resolve configured route
+6. If a fallback chain exists, prepare ordered providers
+7. Provider adapter sends the request
+8. Response is returned in OpenAI-compatible format
+9. Usage tracker records the request asynchronously
 
 ## Streaming Flow
 
-Same as above through step 7, then:
-8. Provider adapter opens streaming connection
-9. Gateway reads SSE chunks from provider in a goroutine
-10. Each chunk is normalized to OpenAI `data: {...}\n\n` format
-11. Chunks are forwarded to client via Fiber's streaming response
-12. On `data: [DONE]`, connection closes
-13. Final token counts are estimated and tracked
+Same as above through route resolution, then:
+
+1. Provider adapter opens a streaming connection
+2. Gateway reads SSE chunks from the provider
+3. Each chunk is forwarded to the client
+4. Final usage is recorded when the stream completes
 
 ## Security Model
 
-- Provider API keys stored in environment variables only
-- Keys never logged (Zap field filters)
-- Keys redacted in `/api/config` endpoint
-- Request/response bodies not logged by default
-- CORS configurable for cross-origin clients
-- Payload size limits enforced
+- Provider API keys are stored in environment variables or config, never logged
+- Request/response bodies are not logged by default
+- CORS is configurable
+- Payload size limits are enforced
+- Dashboard endpoints require the same gateway API key as OpenAI-compatible endpoints
 
 ## Deployment Model
 
 - Single binary, single process
 - SQLite database file (default: `./data/novexa.db`)
 - No external dependencies required
-- Docker image <20MB
-- Deployable on Railway, Fly.io, Render, or local machine
+- Docker image available
+- Deployable on Railway, Fly.io, Render, or locally

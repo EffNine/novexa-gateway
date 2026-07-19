@@ -80,7 +80,7 @@ providers:
     models:
       - "local-model"
 
-# Model routing (optional - auto-detected if not specified)
+# Model routing (required unless you only use provider-prefixed IDs from /v1/models)
 # model_id: optional override of the upstream model slug sent to the provider
 # Prefixed Model IDs from /v1/models (e.g. groq/llama3-8b) strip the provider
 # prefix before lookup; the base Model ID must route to that provider.
