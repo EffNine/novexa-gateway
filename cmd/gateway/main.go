@@ -21,7 +21,10 @@ import (
 	"github.com/novexa/gateway/internal/provider/gemini"
 	"github.com/novexa/gateway/internal/provider/groq"
 	"github.com/novexa/gateway/internal/provider/lmstudio"
+	"github.com/novexa/gateway/internal/provider/nousportal"
+	"github.com/novexa/gateway/internal/provider/nvidianim"
 	"github.com/novexa/gateway/internal/provider/ollama"
+	"github.com/novexa/gateway/internal/provider/opencode"
 	"github.com/novexa/gateway/internal/provider/openai"
 	"github.com/novexa/gateway/internal/provider/openrouter"
 	"github.com/novexa/gateway/internal/router"
@@ -200,6 +203,27 @@ func registerProviders(cfg *config.Config, registry *provider.Registry, logger *
 	// LM Studio
 	if cfg.Providers.LMStudio.Enabled {
 		p := lmstudio.NewProvider(cfg.Providers.LMStudio.APIKey, cfg.Providers.LMStudio.BaseURL, cfg.Providers.LMStudio.Timeout)
+		registry.Register(p)
+		logger.Debug("Registered provider", zap.String("provider", p.Name()))
+	}
+
+	// OpenCode
+	if cfg.Providers.Opencode.Enabled {
+		p := opencode.NewProvider(cfg.Providers.Opencode.APIKey, cfg.Providers.Opencode.BaseURL, cfg.Providers.Opencode.Timeout)
+		registry.Register(p)
+		logger.Debug("Registered provider", zap.String("provider", p.Name()))
+	}
+
+	// NVIDIA NIM
+	if cfg.Providers.NvidiaNim.Enabled {
+		p := nvidianim.NewProvider(cfg.Providers.NvidiaNim.APIKey, cfg.Providers.NvidiaNim.BaseURL, cfg.Providers.NvidiaNim.Timeout)
+		registry.Register(p)
+		logger.Debug("Registered provider", zap.String("provider", p.Name()))
+	}
+
+	// Nous Portal
+	if cfg.Providers.NousPortal.Enabled {
+		p := nousportal.NewProvider(cfg.Providers.NousPortal.APIKey, cfg.Providers.NousPortal.BaseURL, cfg.Providers.NousPortal.Timeout)
 		registry.Register(p)
 		logger.Debug("Registered provider", zap.String("provider", p.Name()))
 	}

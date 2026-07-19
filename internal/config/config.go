@@ -53,6 +53,9 @@ type ProvidersConfig struct {
 	Groq       ProviderConfig `mapstructure:"groq"`
 	Ollama     ProviderConfig `mapstructure:"ollama"`
 	LMStudio   ProviderConfig `mapstructure:"lmstudio"`
+	Opencode   ProviderConfig `mapstructure:"opencode"`
+	NvidiaNim  ProviderConfig `mapstructure:"nvidia_nim"`
+	NousPortal ProviderConfig `mapstructure:"nous_portal"`
 }
 
 // ProviderConfig holds configuration for a single provider
@@ -244,6 +247,21 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.lmstudio.timeout", 120*time.Second)
 	v.SetDefault("providers.lmstudio.max_retries", 1)
 
+	v.SetDefault("providers.opencode.enabled", false)
+	v.SetDefault("providers.opencode.base_url", "https://api.opencode.ai/v1")
+	v.SetDefault("providers.opencode.timeout", 60*time.Second)
+	v.SetDefault("providers.opencode.max_retries", 3)
+
+	v.SetDefault("providers.nvidia_nim.enabled", false)
+	v.SetDefault("providers.nvidia_nim.base_url", "https://integrate.api.nvidia.com/v1")
+	v.SetDefault("providers.nvidia_nim.timeout", 60*time.Second)
+	v.SetDefault("providers.nvidia_nim.max_retries", 3)
+
+	v.SetDefault("providers.nous_portal.enabled", false)
+	v.SetDefault("providers.nous_portal.base_url", "https://api.nousresearch.com/v1")
+	v.SetDefault("providers.nous_portal.timeout", 60*time.Second)
+	v.SetDefault("providers.nous_portal.max_retries", 3)
+
 	// Retry defaults
 	v.SetDefault("retry.max_retries", 3)
 	v.SetDefault("retry.initial_backoff", 100*time.Millisecond)
@@ -300,6 +318,15 @@ func autoEnableProviders(cfg *Config) {
 	}
 	if os.Getenv("GROQ_API_KEY") != "" {
 		cfg.Providers.Groq.Enabled = true
+	}
+	if os.Getenv("OPENCODE_API_KEY") != "" {
+		cfg.Providers.Opencode.Enabled = true
+	}
+	if os.Getenv("NVIDIA_NIM_API_KEY") != "" {
+		cfg.Providers.NvidiaNim.Enabled = true
+	}
+	if os.Getenv("NOUS_PORTAL_API_KEY") != "" {
+		cfg.Providers.NousPortal.Enabled = true
 	}
 }
 
