@@ -141,6 +141,8 @@ See [Architecture](docs/architecture.md) for details.
 | Provider | Status | Chat | Embeddings | Streaming | List Models | Pricing |
 |----------|--------|------|------------|-----------|-------------|---------|
 | OpenAI | Implemented | ✅ | ✅ | ✅ | ✅ | ✅ (static map) |
+| OpenCode | Implemented | ✅ | ✅ | ✅ | ✅ | ✅ (static map) |
+| NVIDIA NIM | Implemented | ✅ | ✅ | ✅ | ✅ | ✅ (static map) |
 | Anthropic | Stub | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Gemini | Stub | ❌ | ❌ | ❌ | ❌ | ❌ |
 | DeepSeek | Stub | ❌ | ❌ | ❌ | ❌ | ❌ |

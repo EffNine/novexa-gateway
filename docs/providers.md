@@ -15,8 +15,8 @@ Novexa Gateway has provider adapters for 9 upstream services. The following tabl
 | Ollama | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Stub registered when enabled |
 | LM Studio | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Stub registered when enabled |
 | Generic | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Stub registered when enabled |
-| OpenCode | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Stub registered when enabled |
-| NVIDIA NIM | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Stub registered when enabled |
+| OpenCode | ✅ | ✅ | ✅ | ✅ | ✅ (static map) | OpenAI-compatible Zen endpoint |
+| NVIDIA NIM | ✅ | ✅ | ✅ | ✅ | ✅ (static map) | OpenAI-compatible NIM endpoint |
 | Nous Portal | ❌ Planned | ❌ | ❌ | ❌ | ❌ | Stub registered when enabled |
 
 A stub provider is present in the registry and will appear in health checks and the model catalog if you configure a **static model list** for it. You can also define routes and aliases pointing to stub providers; chat/embeddings requests to them will return errors until the adapter is implemented.
