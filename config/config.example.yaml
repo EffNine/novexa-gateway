@@ -1,0 +1,166 @@
+# Novexa Gateway Configuration Example
+# Copy this file to config.yaml and fill in your API keys.
+# All values can be overridden with environment variables.
+
+# Server configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 120s
+  max_request_size: 10MB
+  cors:
+    enabled: true
+    origins: ["*"]
+    methods: ["GET", "POST", "OPTIONS"]
+    headers: ["Authorization", "Content-Type"]
+
+# Gateway API key (required - set via NOVEXA_API_KEY env var)
+api_key: "${NOVEXA_API_KEY}"
+
+# Provider configuration
+providers:
+  openai:
+    enabled: true
+    api_key: "${OPENAI_API_KEY}"
+    base_url: "https://api.openai.com/v1"
+    timeout: 60s
+    max_retries: 3
+
+  anthropic:
+    enabled: false
+    api_key: "${ANTHROPIC_API_KEY}"
+    base_url: "https://api.anthropic.com"
+    timeout: 60s
+    max_retries: 3
+
+  gemini:
+    enabled: false
+    api_key: "${GEMINI_API_KEY}"
+    base_url: "https://generativelanguage.googleapis.com/v1beta"
+    timeout: 60s
+    max_retries: 3
+
+  deepseek:
+    enabled: false
+    api_key: "${DEEPSEEK_API_KEY}"
+    base_url: "https://api.deepseek.com/v1"
+    timeout: 60s
+    max_retries: 3
+
+  openrouter:
+    enabled: false
+    api_key: "${OPENROUTER_API_KEY}"
+    base_url: "https://openrouter.ai/api/v1"
+    timeout: 60s
+    max_retries: 3
+
+  groq:
+    enabled: false
+    api_key: "${GROQ_API_KEY}"
+    base_url: "https://api.groq.com/openai/v1"
+    timeout: 30s
+    max_retries: 3
+
+  ollama:
+    enabled: false
+    base_url: "http://localhost:11434"
+    timeout: 120s
+    max_retries: 1
+    # Static Model List used when the provider cannot list models dynamically
+    models:
+      - "llama3"
+      - "mistral"
+
+  lmstudio:
+    enabled: false
+    base_url: "http://localhost:1234/v1"
+    timeout: 120s
+    max_retries: 1
+    models:
+      - "local-model"
+
+# Model routing (optional - auto-detected if not specified)
+# model_id: optional override of the upstream model slug sent to the provider
+# Prefixed Model IDs from /v1/models (e.g. groq/llama3-8b) strip the provider
+# prefix before lookup; the base Model ID must route to that provider.
+routes:
+  "gpt-4o":
+    provider: openai
+  "gpt-4o-mini":
+    provider: openai
+  "claude-sonnet-4-20250514":
+    provider: anthropic
+  "claude-3-5-haiku-20241022":
+    provider: anthropic
+  "gemini-2.5-pro":
+    provider: gemini
+  "gemini-2.5-flash":
+    provider: gemini
+  "deepseek-chat":
+    provider: deepseek
+  "deepseek-reasoner":
+    provider: deepseek
+
+# Model aliases (optional)
+aliases:
+  "fast": "gpt-4o-mini"
+  "smart": "gpt-4o"
+  "coding": "deepseek-chat"
+  "cheap": "gpt-4o-mini"
+  "local": "llama3.1:8b"
+
+# Fallback chains (optional)
+# model_id: optional override of the upstream model slug sent to the provider
+fallbacks:
+  "deepseek-chat":
+    - provider: deepseek
+    - provider: openrouter
+      model_id: "deepseek/deepseek-chat"
+    - provider: groq
+      model_id: "deepseek-r1-distill-llama-70b"
+
+# Retry configuration
+retry:
+  max_retries: 3
+  initial_backoff: 100ms
+  max_backoff: 5s
+  backoff_multiplier: 2.0
+  retryable_status_codes: [429, 500, 502, 503]
+
+# Database configuration
+database:
+  driver: "sqlite"
+  dsn: "./data/novexa.db"
+  max_open_conns: 10
+  max_idle_conns: 5
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  log_prompts: false
+  log_responses: false
+
+# Rate limiting
+rate_limit:
+  enabled: true
+  global:
+    requests_per_minute: 1000
+  per_provider:
+    requests_per_minute: 100
+
+# Health monitoring
+health:
+  check_interval: 60s
+  timeout: 10s
+  unhealthy_threshold: 3
+
+# Usage tracking
+usage:
+  enabled: true
+
+# Cost tracking
+cost:
+  enabled: true
+  currency: "USD"

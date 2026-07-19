@@ -1,0 +1,37 @@
+linters:
+  enable:
+    - gofmt
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - typecheck
+    - unused
+    - misspell
+    - revive
+    - gosec
+    - unconvert
+    - prealloc
+
+linters-settings:
+  govet:
+    check-shadowing: true
+  gosec:
+    excludes:
+      - G107  # Potential HTTP request made with variable URL
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+
+run:
+  timeout: 5m
+  tests: true
