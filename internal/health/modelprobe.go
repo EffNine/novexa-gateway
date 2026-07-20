@@ -37,7 +37,7 @@ func NewModelProber(
 	cfg config.ModelHealthConfig,
 ) *ModelProber {
 	if cfg.CheckInterval <= 0 {
-		cfg.CheckInterval = 12 * time.Hour
+		cfg.CheckInterval = 24 * time.Hour
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = 15 * time.Second
@@ -196,10 +196,9 @@ func (p *ModelProber) ProbeModel(entry catalog.Entry) {
 	if IsNeutralProbeFailure(statusCode, msg) || IsInconclusiveProbeFailure(statusCode, msg) {
 		return
 	}
-	// Controlled probe request: any other failure means the model should not be
-	// advertised (404, gone, invalid model, unexpected 4xx/5xx not classified
-	// as transient). hide_unreachable then omits it from /v1/models.
-	p.store.RecordFailure(entry.ModelID, entry.Provider, entry.ProviderModelID, msg, statusCode)
+	if IsUnreachableProbeFailure(statusCode, msg) {
+		p.store.RecordFailure(entry.ModelID, entry.Provider, entry.ProviderModelID, msg, statusCode)
+	}
 }
 
 func (p *ModelProber) shouldProbe(providerName string) bool {

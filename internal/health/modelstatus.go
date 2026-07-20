@@ -28,10 +28,9 @@ type ModelStatusStore struct {
 }
 
 // NewModelStatusStore creates an empty store.
-// unhealthyThreshold defaults to 1 so a single definitive failure hides the model.
 func NewModelStatusStore(unhealthyThreshold int, unknownAsReachable bool) *ModelStatusStore {
 	if unhealthyThreshold <= 0 {
-		unhealthyThreshold = 1
+		unhealthyThreshold = 2
 	}
 	return &ModelStatusStore{
 		statuses:           make(map[string]*ModelStatus),
@@ -87,9 +86,7 @@ func (s *ModelStatusStore) IsReachable(modelID string) (reachable bool, known bo
 }
 
 // ShouldAdvertise returns true if the model should appear in /v1/models when
-// hideUnreachable is enabled. With unknownAsReachable=false (default), only
-// models that have passed a probe (Reachable=true) are advertised — unprobed
-// and failed models are omitted.
+// hideUnreachable is enabled.
 func (s *ModelStatusStore) ShouldAdvertise(modelID string) bool {
 	reachable, known := s.IsReachable(modelID)
 	if !known {
