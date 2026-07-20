@@ -212,11 +212,34 @@ health:
   check_interval: 60s
   timeout: 10s
   unhealthy_threshold: 3
+  # Per-model probes hide endpoints that appear in /models but fail inference
+  # (common on NVIDIA NIM free tier). Probes send max_tokens=1 chat requests.
+  models:
+    enabled: true
+    hide_unreachable: true
+    check_interval: 5m
+    timeout: 15s
+    concurrency: 3
+    unhealthy_threshold: 2
+    providers:
+      - nvidia_nim
+    unknown_as_reachable: true
 
 # Usage tracking
 usage:
   enabled: true
 ```
+
+### Model reachability
+
+NVIDIA NIM's `GET /v1/models` lists the full catalog, including retired and non-callable endpoints. There is no catalog flag for "free and online". Novexa optionally probes each configured provider's models with a minimal `POST /chat/completions` (`max_tokens: 1`) and:
+
+- Caches online/offline status (also updated from live chat failures)
+- Hides unreachable models from `GET /v1/models` when `health.models.hide_unreachable` is true
+- Exposes status on `GET /api/models` and `GET /api/models/status`
+- Use `GET /api/models?include_unreachable=true` to list hidden models with their status
+
+Rate limits (`429`) and auth errors do not mark a model offline. Default probing is limited to `nvidia_nim` to avoid burning quota on other providers.
 
 ## Minimal Configuration
 

@@ -10,9 +10,9 @@ Novexa Gateway is a single-operator, self-hosted AI API gateway. One operator ow
 
 The management dashboard exposes:
 
-- **Models** — the merged Model Catalog from all configured providers.
+- **Models** — the merged Model Catalog from all configured providers, optionally filtered by per-model online status.
 - **Usage** — estimated cost and token/resource consumption, totals and per-provider/per-model breakdowns.
-- **Health** — per-provider liveness and latency.
+- **Health** — per-provider liveness and latency, plus optional per-model reachability (especially for providers like NVIDIA NIM where the catalog includes unreachable endpoints).
 - **Logs** — recent request log entries for debugging.
 
 ## Canonical Terms

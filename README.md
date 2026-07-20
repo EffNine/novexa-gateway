@@ -18,13 +18,13 @@ docker run -d -p 8080:8080 \
 
 - **Single API Key** — Connect OpenAI-compatible clients (VS Code, Claude Code, Continue, Aider, Open WebUI, custom apps) to one endpoint with one key
 - **Merged Model Picker** — `/v1/models` aggregates catalogs from all configured providers; every Model ID is provider-prefixed (e.g. `nvidia_nim/deepseek-ai/deepseek-v4-flash`) so it routes when selected
-
+- **Model Online Status** — Optional probes hide unreachable models (especially NVIDIA NIM free endpoints that appear in `/models` but fail inference); status on `/api/models` and `/api/models/status`
 - **Explicit Model Routing** — Map Model IDs to providers and optional upstream Provider Model IDs; aliases for operator convenience
 - **Fallback Chains** — Try backup providers when the primary fails
 - **Provider-Prefix Routing** — Use `provider/model-id` in clients; gateway strips the prefix before route lookup
 - **Usage Tracking** — Per-request records with token counters, extra counters for non-token providers, latency, and cost source
 - **Cost Estimation** — Cost resolved via provider per-request cost → `GetPricing` → manual `cost.rates` → unknown (USD only)
-- **Dashboard API** — `/api/models`, `/api/usage`, `/api/health`, `/api/logs`, all protected by the gateway API key
+- **Dashboard API** — `/api/models`, `/api/models/status`, `/api/usage`, `/api/health`, `/api/logs`, all protected by the gateway API key
 - **Docker Ready** — Single container with SQLite
 - **Free Cloud Deploy** — Fly.io one-shot: `./scripts/fly-deploy.sh` (also Railway / Render)
 
@@ -161,8 +161,16 @@ Stubs are registered when enabled and can be completed by implementing the provi
 All endpoints use the same gateway API key:
 
 ```bash
-# Merged model catalog
+# Merged model catalog (includes reachability when probing is enabled)
 curl http://localhost:8080/api/models \
+  -H "Authorization: Bearer your-key"
+
+# Per-model online status cache
+curl http://localhost:8080/api/models/status \
+  -H "Authorization: Bearer your-key"
+
+# Include models hidden from /v1/models
+curl "http://localhost:8080/api/models?include_unreachable=true" \
   -H "Authorization: Bearer your-key"
 
 # Provider health
