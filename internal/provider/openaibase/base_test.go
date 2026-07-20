@@ -46,7 +46,7 @@ func TestChatCompletionPromotesReasoningToContent(t *testing.T) {
 	}
 }
 
-func TestChatCompletionStreamSkipsKeepalivesAndPromotesReasoning(t *testing.T) {
+func TestChatCompletionStreamSkipsKeepalivesAndKeepsReasoning(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		flusher, ok := w.(http.Flusher)
@@ -89,6 +89,7 @@ func TestChatCompletionStreamSkipsKeepalivesAndPromotesReasoning(t *testing.T) {
 		t.Fatalf("ChatCompletionStream: %v", err)
 	}
 
+	var reasoning []string
 	var contents []string
 	var sawDone bool
 	for chunk := range ch {
@@ -101,14 +102,17 @@ func TestChatCompletionStreamSkipsKeepalivesAndPromotesReasoning(t *testing.T) {
 		}
 		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta != nil {
 			contents = append(contents, chunk.Choices[0].Delta.Content)
+			reasoning = append(reasoning, chunk.Choices[0].Delta.Reasoning)
 		}
 	}
 	if !sawDone {
 		t.Fatal("expected [DONE]")
 	}
-	got := strings.Join(contents, "")
-	if got != "Hi" {
-		t.Fatalf("streamed content = %q, want Hi", got)
+	if strings.Join(contents, "") != "" {
+		t.Fatalf("content should stay empty on deltas, got %q", strings.Join(contents, ""))
+	}
+	if strings.Join(reasoning, "") != "Hi" {
+		t.Fatalf("reasoning = %q, want Hi", strings.Join(reasoning, ""))
 	}
 }
 
@@ -157,5 +161,60 @@ func TestChatCompletionForwardsReasoningEffort(t *testing.T) {
 	if resp.Usage == nil || resp.Usage.CompletionTokensDetails == nil ||
 		resp.Usage.CompletionTokensDetails.ReasoningTokens != 5 {
 		t.Fatalf("usage details = %+v", resp.Usage)
+	}
+}
+
+func TestChatCompletionStreamRequestsIncludeUsage(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Fatalf("decode upstream body: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		fmt.Fprintf(w, "data: {\"id\":\"s1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"Hi\"}}]}\n\n")
+		flusher.Flush()
+		fmt.Fprintf(w, "data: {\"id\":\"s1\",\"object\":\"chat.completion.chunk\",\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":2,\"total_tokens\":7}}\n\n")
+		flusher.Flush()
+		fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer server.Close()
+
+	p := openaibase.New("nvidia_nim", "key", server.URL, 10*time.Second)
+	ch, err := p.ChatCompletionStream(context.Background(), &apitypes.ChatCompletionRequest{
+		Model:    "nvidia/nemotron-3-ultra-550b-a55b",
+		Messages: []apitypes.Message{{Role: "user", Content: "Hi"}},
+	})
+	if err != nil {
+		t.Fatalf("ChatCompletionStream: %v", err)
+	}
+
+	opts, ok := gotBody["stream_options"].(map[string]any)
+	if !ok || opts["include_usage"] != true {
+		t.Fatalf("stream_options = %v, want include_usage=true", gotBody["stream_options"])
+	}
+
+	var usage *apitypes.Usage
+	var content string
+	for chunk := range ch {
+		if chunk.Error != nil {
+			t.Fatalf("stream error: %v", chunk.Error)
+		}
+		if chunk.Done {
+			break
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+		}
+		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta != nil {
+			content += chunk.Choices[0].Delta.Content
+		}
+	}
+	if content != "Hi" {
+		t.Fatalf("content = %q", content)
+	}
+	if usage == nil || usage.CompletionTokens != 2 {
+		t.Fatalf("usage = %+v, want completion_tokens=2", usage)
 	}
 }

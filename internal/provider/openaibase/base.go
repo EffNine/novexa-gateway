@@ -99,6 +99,7 @@ func (b *Base) ChatCompletion(ctx context.Context, req *apitypes.ChatCompletionR
 func (b *Base) ChatCompletionStream(ctx context.Context, req *apitypes.ChatCompletionRequest) (
 	<-chan apitypes.StreamChunk, error) {
 	req.Stream = true
+	req.EnsureStreamUsage()
 
 	body, err := json.Marshal(req)
 	if err != nil {
@@ -144,7 +145,11 @@ func (b *Base) ChatCompletionStream(ctx context.Context, req *apitypes.ChatCompl
 				ch <- apitypes.StreamChunk{Error: fmt.Errorf("failed to parse stream chunk: %w", err)}
 				return
 			}
-			apitypes.NormalizeChoices(chunk.Choices)
+			// Do not promote reasoning→content on stream deltas: models like
+			// Nemotron emit reasoning chunks before content, and promoting
+			// would concatenate thinking into the visible reply. Non-stream
+			// responses still normalize; the handler flushes reasoning as
+			// content only if the stream never sent any content.
 			ch <- chunk
 		}
 	}()

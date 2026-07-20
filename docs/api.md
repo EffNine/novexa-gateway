@@ -45,6 +45,7 @@ Creates a model response for the given chat conversation.
 - `temperature` (number): Sampling temperature (0-2). Default: 1.0
 - `max_tokens` (number): Maximum tokens to generate. Default: provider default
 - `stream` (boolean): Enable streaming. Default: false
+- `stream_options` (object): Streaming options. The gateway sets `include_usage: true` automatically on stream requests so clients receive token usage in the final chunk.
 - `top_p` (number): Nucleus sampling parameter. Default: 1.0
 - `frequency_penalty` (number): Frequency penalty (-2 to 2). Default: 0
 - `presence_penalty` (number): Presence penalty (-2 to 2). Default: 0

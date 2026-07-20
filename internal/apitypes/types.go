@@ -18,12 +18,20 @@ type ChatCompletionRequest struct {
 	Seed             *int                   `json:"seed,omitempty"`
 	Tools            []Tool                 `json:"tools,omitempty"`
 	ToolChoice       interface{}            `json:"tool_choice,omitempty"`
+	StreamOptions    *StreamOptions         `json:"stream_options,omitempty"`
 
 	// Reasoning controls (forwarded when the upstream model/provider supports them).
 	// Prefer Reasoning (OpenRouter-style); ReasoningEffort is the OpenAI shorthand.
 	Reasoning        *ReasoningConfig `json:"reasoning,omitempty"`
 	ReasoningEffort  string           `json:"reasoning_effort,omitempty"` // max|xhigh|high|medium|low|minimal|none
 	IncludeReasoning *bool            `json:"include_reasoning,omitempty"`
+}
+
+// StreamOptions configures streaming behavior (OpenAI-compatible).
+type StreamOptions struct {
+	// IncludeUsage asks the upstream to emit a final chunk with token usage.
+	// Without this, many providers omit usage and clients show completion_tokens: 0.
+	IncludeUsage bool `json:"include_usage,omitempty"`
 }
 
 // ReasoningConfig controls reasoning/thinking for models that support it
@@ -50,6 +58,19 @@ func (r *ChatCompletionRequest) SupportsReasoningParams() bool {
 		return true
 	}
 	return r.Reasoning != nil
+}
+
+// EnsureStreamUsage enables stream_options.include_usage so upstreams emit a
+// final usage chunk. Without it, OpenAI-compatible providers often omit usage
+// and clients report completion_tokens: 0 despite non-empty content.
+func (r *ChatCompletionRequest) EnsureStreamUsage() {
+	if r == nil {
+		return
+	}
+	if r.StreamOptions == nil {
+		r.StreamOptions = &StreamOptions{}
+	}
+	r.StreamOptions.IncludeUsage = true
 }
 
 // Message represents a chat message

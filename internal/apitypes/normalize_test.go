@@ -136,4 +136,17 @@ func TestUsagePreservesReasoningTokens(t *testing.T) {
 	}
 }
 
+func TestEnsureStreamUsage(t *testing.T) {
+	req := &apitypes.ChatCompletionRequest{Model: "x"}
+	req.EnsureStreamUsage()
+	if req.StreamOptions == nil || !req.StreamOptions.IncludeUsage {
+		t.Fatalf("StreamOptions = %+v", req.StreamOptions)
+	}
+	// Idempotent when already set
+	req.EnsureStreamUsage()
+	if !req.StreamOptions.IncludeUsage {
+		t.Fatal("IncludeUsage cleared")
+	}
+}
+
 func boolPtr(v bool) *bool { return &v }
