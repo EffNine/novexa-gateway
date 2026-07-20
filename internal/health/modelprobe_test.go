@@ -19,6 +19,77 @@ import (
 	"go.uber.org/zap"
 )
 
+func TestModelProberHidesNonTransientProbeFailuresFromCatalog(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
+			_ = json.NewEncoder(w).Encode(apitypes.ModelList{
+				Object: "list",
+				Data: []apitypes.ModelInfo{
+					{ID: "good", Object: "model"},
+					{ID: "bad-400", Object: "model"},
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/chat/completions":
+			var req apitypes.ChatCompletionRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			if req.Model == "bad-400" {
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":{"message":"unsupported model for chat","type":"invalid_request"}}`))
+				return
+			}
+			_ = json.NewEncoder(w).Encode(apitypes.ChatCompletionResponse{
+				ID:      "ok",
+				Object:  "chat.completion",
+				Choices: []apitypes.Choice{{Index: 0, Message: &apitypes.Message{Role: "assistant", Content: "pong"}}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	reg := provider.NewRegistry()
+	reg.Register(newProbeTestProvider("nvidia_nim", srv.URL+"/v1"))
+	store := health.NewModelStatusStore(1, true)
+	cat := catalog.New(reg, nil)
+	cat.SetReachabilityFilter(store, true)
+
+	prober := health.NewModelProber(cat, reg, store, zap.NewNop(), config.ModelHealthConfig{
+		Enabled:            true,
+		HideUnreachable:    true,
+		Timeout:            2 * time.Second,
+		Concurrency:        2,
+		UnhealthyThreshold: 1,
+		Providers:          nil,
+		UnknownAsReachable: true,
+	})
+	prober.ProbeAll()
+
+	entries, err := cat.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.ModelID
+	}
+	for _, id := range ids {
+		if id == "nvidia_nim/bad-400" {
+			t.Fatalf("failed probe model still advertised: %v", ids)
+		}
+	}
+	foundGood := false
+	for _, id := range ids {
+		if id == "nvidia_nim/good" {
+			foundGood = true
+		}
+	}
+	if !foundGood {
+		t.Fatalf("reachable model missing from catalog: %v", ids)
+	}
+}
+
 func TestModelProberMarksUnreachableAndFiltersCatalog(t *testing.T) {
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

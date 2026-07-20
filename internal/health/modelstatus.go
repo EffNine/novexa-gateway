@@ -28,9 +28,10 @@ type ModelStatusStore struct {
 }
 
 // NewModelStatusStore creates an empty store.
+// unhealthyThreshold defaults to 1 so a single definitive failure hides the model.
 func NewModelStatusStore(unhealthyThreshold int, unknownAsReachable bool) *ModelStatusStore {
 	if unhealthyThreshold <= 0 {
-		unhealthyThreshold = 2
+		unhealthyThreshold = 1
 	}
 	return &ModelStatusStore{
 		statuses:           make(map[string]*ModelStatus),

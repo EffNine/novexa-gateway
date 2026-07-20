@@ -146,7 +146,8 @@ type ModelHealthConfig struct {
 	// Concurrency is max parallel probes. Default 3 (stay under NIM free-tier RPM).
 	Concurrency int `mapstructure:"concurrency"`
 	// UnhealthyThreshold consecutive failures before a model is considered
-	// unreachable. Default 2. Uses health.unhealthy_threshold when unset (0).
+	// unreachable. Default 1 so a single definitive probe failure hides the
+	// model from /v1/models. Uses health.unhealthy_threshold when unset (0).
 	UnhealthyThreshold int `mapstructure:"unhealthy_threshold"`
 	// Providers limits probing to these provider names.
 	// Empty list (default) means all registered providers.
@@ -322,7 +323,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("health.models.check_interval", 12*time.Hour)
 	v.SetDefault("health.models.timeout", 30*time.Second)
 	v.SetDefault("health.models.concurrency", 3)
-	v.SetDefault("health.models.unhealthy_threshold", 2)
+	v.SetDefault("health.models.unhealthy_threshold", 1)
 	// Empty providers list = probe all registered providers on startup and each interval.
 	v.SetDefault("health.models.providers", []string{})
 	v.SetDefault("health.models.unknown_as_reachable", true)

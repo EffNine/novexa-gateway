@@ -75,9 +75,9 @@ Implementation plan is in [docs/PLAN.md](PLAN.md) with six vertical slices.
 ### Model online status / auto-hide — COMPLETE
 - Background probes (`health.models`) send minimal chat completions to detect unreachable catalog entries.
 - Default: probe **all** registered providers; full pass on startup/redeploy, then every `12h`.
-- Unreachable models are omitted from `GET /v1/models` when `hide_unreachable` is true.
+- A single definitive probe failure hides the model from `GET /v1/models` (`hide_unreachable: true`, `unhealthy_threshold: 1`).
 - Dashboard: `GET /api/models` (reachability fields), `GET /api/models/status`, `?include_unreachable=true`.
-- Live chat outcomes also update the reachability cache; 429/401/403 are neutral.
+- Live chat outcomes also update the reachability cache; 429/401/403 are neutral; timeouts/5xx are inconclusive.
 - Documented in `docs/api.md`, `docs/providers.md`, `docs/configuration.md`, `docs/architecture.md`, `docs/quickstart.md`, README, CONTEXT, AGENTS.
 
 ### Slice 6: Documentation reconciliation — COMPLETE

@@ -189,7 +189,7 @@ health:
     check_interval: 12h
     timeout: 15s
     concurrency: 3
-    unhealthy_threshold: 2
+    unhealthy_threshold: 1
     providers: []
     # Keep unprobed models visible until the first probe finishes.
     unknown_as_reachable: true

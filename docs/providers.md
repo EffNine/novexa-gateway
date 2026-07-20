@@ -156,6 +156,7 @@ Novexa probes models with a minimal `POST /chat/completions` (`max_tokens: 1`) a
 
 - Enabled for **all registered providers** (set `health.models.providers` to limit scope)
 - `hide_unreachable: true` — omit dead models from `/v1/models`
+- `unhealthy_threshold: 1` — hide after a single definitive probe failure
 - `unknown_as_reachable: true` — keep unprobed models visible until the first probe finishes
 - Full pass on every **startup/redeploy**, then every `12h`
 - Concurrency `3` (stay under NIM free-tier rate limits)
@@ -170,7 +171,7 @@ health:
     check_interval: 12h
     timeout: 15s
     concurrency: 3
-    unhealthy_threshold: 2
+    unhealthy_threshold: 1
     providers: []   # empty = all providers
     unknown_as_reachable: true
 ```

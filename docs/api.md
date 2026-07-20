@@ -283,7 +283,7 @@ Novexa optionally probes registered providers with a minimal chat completion and
 | Providers probed | all registered (`providers: []`) |
 | Hide unreachable from `/v1/models` | `true` |
 | Check interval | `12h` (plus startup/redeploy pass) |
-| Unhealthy threshold | `2` consecutive failures |
+| Unhealthy threshold | `1` consecutive failure (hide immediately) |
 | Unprobed models visible | `true` (`unknown_as_reachable`) |
 
 Rate limits (`429`) and auth errors (`401`/`403`) do **not** mark a model offline.

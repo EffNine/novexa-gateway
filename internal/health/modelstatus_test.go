@@ -7,6 +7,19 @@ import (
 	"github.com/novexa/gateway/internal/health"
 )
 
+func TestModelStatusStoreHidesAfterFirstFailureByDefault(t *testing.T) {
+	store := health.NewModelStatusStore(0, true) // 0 → default threshold 1
+
+	store.RecordFailure("nvidia_nim/meta/llama", "nvidia_nim", "meta/llama", "model not found", http.StatusNotFound)
+	if store.ShouldAdvertise("nvidia_nim/meta/llama") {
+		t.Fatal("failed probe must not be advertised (threshold 1)")
+	}
+	st := store.Get("nvidia_nim/meta/llama")
+	if st == nil || st.Reachable {
+		t.Fatalf("expected unreachable after one failure, got %+v", st)
+	}
+}
+
 func TestModelStatusStoreHidesAfterThreshold(t *testing.T) {
 	store := health.NewModelStatusStore(2, true)
 
