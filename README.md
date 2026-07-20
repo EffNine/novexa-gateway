@@ -132,7 +132,8 @@ Client → API Key Check → Rate Limit → Validate → Route → Provider Adap
 - **Rate Limiter** — Global and per-provider limits
 - **Router** — Alias → route → provider-prefix dispatch → fallbacks
 - **Provider Adapters** — Common `Provider` interface
-- **Catalog** — Merges provider model lists (always provider-prefixed) with static fallback
+- **Catalog** — Merges provider model lists (always provider-prefixed) with static fallback; optional reachability filter
+- **Model Prober** — Minimal chat probes (default: `nvidia_nim`) to hide unreachable catalog entries
 - **Usage Tracker** — Persists usage and estimated cost to SQLite
 
 See [Architecture](docs/architecture.md) for details.
@@ -160,7 +161,16 @@ Gemini, DeepSeek, OpenRouter, Groq, OpenCode, NVIDIA NIM, Nous Portal, Ollama, a
 Authenticated with the same gateway API key (`GET /health` is public):
 
 ```bash
+# Merged catalog (includes reachability when probing is enabled)
 curl http://localhost:8080/api/models \
+  -H "Authorization: Bearer your-key"
+
+# Per-model online status cache
+curl http://localhost:8080/api/models/status \
+  -H "Authorization: Bearer your-key"
+
+# Include models hidden from /v1/models
+curl "http://localhost:8080/api/models?include_unreachable=true" \
   -H "Authorization: Bearer your-key"
 
 curl http://localhost:8080/api/health \
@@ -178,6 +188,8 @@ curl http://localhost:8080/api/usage/costs \
 curl http://localhost:8080/api/logs \
   -H "Authorization: Bearer your-key"
 ```
+
+Model online status (especially for NVIDIA NIM free vs unreachable endpoints) is documented in [Configuration](docs/configuration.md#model-reachability), [API](docs/api.md#model-reachability), and [Providers](docs/providers.md#model-reachability-nvidia-nim).
 
 `GET /api/config` and `PUT /api/config/reload` exist; config JSON is still a stub (`coming soon`). Reload works when a reload callback is wired at startup.
 
