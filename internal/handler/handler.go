@@ -155,7 +155,8 @@ func (h *Handler) handleNonStreaming(c *fiber.Ctx, req *apitypes.ChatCompletionR
 	h.recordModelResult(resolved, err, time.Since(start).Milliseconds())
 
 	// Try fallbacks
-	for _, fb := range fallbacks {
+	for i := range fallbacks {
+		fb := fallbacks[i]
 		fallbackReq := *req
 		fallbackReq.Model = fb.ProviderModelID
 
@@ -196,7 +197,8 @@ func (h *Handler) handleStreaming(c *fiber.Ctx, req *apitypes.ChatCompletionRequ
 	h.recordModelResult(resolved, err, time.Since(start).Milliseconds())
 
 	// Try fallbacks
-	for _, fb := range fallbacks {
+	for i := range fallbacks {
+		fb := fallbacks[i]
 		fallbackReq := *req
 		fallbackReq.Model = fb.ProviderModelID
 

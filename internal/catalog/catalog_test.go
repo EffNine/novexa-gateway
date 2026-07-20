@@ -220,4 +220,3 @@ func (s *stubProvider) HealthCheck(context.Context) (*provider.HealthStatus, err
 }
 
 func (s *stubProvider) SupportsModel(string) bool { return false }
-
