@@ -22,11 +22,37 @@ type ChatCompletionRequest struct {
 
 // Message represents a chat message
 type Message struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content"`
-	Name       string     `json:"name,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Role             string     `json:"role"`
+	Content          string     `json:"content"`
+	Name             string     `json:"name,omitempty"`
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string     `json:"tool_call_id,omitempty"`
+	Reasoning        string     `json:"reasoning,omitempty"`         // OpenRouter / Xiaomi-style reasoning
+	ReasoningContent string     `json:"reasoning_content,omitempty"` // DeepSeek-style reasoning
+}
+
+// Normalize fills Content from reasoning fields when upstream returns empty
+// content (common for reasoning models like big-pickle / mimo-v2.5). Chat apps
+// that only read message.content otherwise show a blank reply.
+func (m *Message) Normalize() {
+	if m == nil || m.Content != "" {
+		return
+	}
+	if m.ReasoningContent != "" {
+		m.Content = m.ReasoningContent
+		return
+	}
+	if m.Reasoning != "" {
+		m.Content = m.Reasoning
+	}
+}
+
+// NormalizeChoices normalizes message/delta content on each choice.
+func NormalizeChoices(choices []Choice) {
+	for i := range choices {
+		choices[i].Message.Normalize()
+		choices[i].Delta.Normalize()
+	}
 }
 
 // Tool represents a tool/function definition
