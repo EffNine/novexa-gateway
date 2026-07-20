@@ -33,11 +33,12 @@ Standard commands live in the `Makefile` and `README.md` (`make build|test|lint|
   Model ID from `/v1/models` instead (e.g. `nvidia_nim/meta/llama-3.1-8b-instruct`), which the
   router strips and dispatches without needing a matching route entry.
 - **Model reachability probes (esp. NVIDIA NIM).** `/models` catalogs can list free and
-  unreachable endpoints with no availability flag. By default the gateway probes `nvidia_nim`
-  models with a minimal chat completion and hides failures from `/v1/models`. Status:
-  `GET /api/models`, `GET /api/models/status`, `GET /api/models?include_unreachable=true`.
-  Config under `health.models` (see `docs/configuration.md`). Disable with
-  `health.models.enabled: false`.
+  unreachable endpoints with no availability flag. By default the gateway probes **all**
+  registered providers with a minimal chat completion on every startup/redeploy, then every
+  `12h`, and hides failures from `/v1/models`. Status: `GET /api/models`,
+  `GET /api/models/status`, `GET /api/models?include_unreachable=true`. Config under
+  `health.models` (see `docs/configuration.md`). Disable with `health.models.enabled: false`.
+  Limit scope with `health.models.providers: [nvidia_nim]`.
 
 ### Local end-to-end testing without real provider keys
 

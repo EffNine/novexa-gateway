@@ -132,6 +132,41 @@ func TestModelProberSkipsNonConfiguredProviders(t *testing.T) {
 	}
 }
 
+func TestModelProberEmptyProvidersProbesAll(t *testing.T) {
+	var chatHits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			_ = json.NewEncoder(w).Encode(apitypes.ModelList{
+				Object: "list",
+				Data:   []apitypes.ModelInfo{{ID: "m1", Object: "model"}},
+			})
+			return
+		}
+		if r.URL.Path == "/v1/chat/completions" {
+			chatHits.Add(1)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"1","choices":[{"message":{"role":"assistant","content":"x"}}]}`))
+	}))
+	defer srv.Close()
+
+	reg := provider.NewRegistry()
+	reg.Register(newProbeTestProvider("openai", srv.URL+"/v1"))
+	reg.Register(newProbeTestProvider("nvidia_nim", srv.URL+"/v1"))
+	store := health.NewModelStatusStore(1, true)
+	cat := catalog.New(reg, nil)
+	prober := health.NewModelProber(cat, reg, store, zap.NewNop(), config.ModelHealthConfig{
+		Enabled:     true,
+		Timeout:     time.Second,
+		Concurrency: 2,
+		Providers:   nil, // empty = all providers
+	})
+	prober.ProbeAll()
+	if chatHits.Load() != 2 {
+		t.Fatalf("expected both providers probed, hits=%d want 2", chatHits.Load())
+	}
+}
+
 type probeTestProvider struct {
 	name    string
 	baseURL string

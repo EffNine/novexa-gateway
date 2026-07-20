@@ -268,20 +268,21 @@ Returns the cached per-model reachability probe results only (models that have b
 
 NVIDIA NIM (and similar catalogs) often list models that are not currently callable — retired free endpoints, capacity-limited models, or non-chat entries. There is no reliable “available” flag on `GET /models`.
 
-Novexa optionally probes configured providers with a minimal chat completion (`max_tokens: 1`) and:
+Novexa optionally probes registered providers with a minimal chat completion and:
 
-1. Caches online/offline status (also updated from live chat successes/failures)
-2. Hides unreachable models from `GET /v1/models` when `health.models.hide_unreachable` is true
-3. Exposes status on `GET /api/models` and `GET /api/models/status`
+1. Runs a full pass on every startup/redeploy, then again every `check_interval`
+2. Caches online/offline status (also updated from live chat successes/failures)
+3. Hides unreachable models from `GET /v1/models` when `health.models.hide_unreachable` is true
+4. Exposes status on `GET /api/models` and `GET /api/models/status`
 
 **Defaults** (see [Configuration](configuration.md#model-reachability)):
 
 | Setting | Default |
 |---------|---------|
 | Enabled | `true` |
-| Providers probed | `nvidia_nim` only |
+| Providers probed | all registered (`providers: []`) |
 | Hide unreachable from `/v1/models` | `true` |
-| Check interval | `24h` |
+| Check interval | `12h` (plus startup/redeploy pass) |
 | Unhealthy threshold | `2` consecutive failures |
 | Unprobed models visible | `true` (`unknown_as_reachable`) |
 
