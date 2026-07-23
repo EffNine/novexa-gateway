@@ -289,12 +289,14 @@ NVIDIA NIM's `GET /v1/models` lists the full catalog, including retired and non-
 
 - Runs a full probe pass on every startup/redeploy, then again every `check_interval`
 - Caches online/offline status (also updated from live chat failures)
-- Keeps confirmed failures hidden during the first pass (list shrinks; never flashes empty), then lists only models that passed (`unknown_as_reachable: false`)
+- Keeps confirmed failures hidden during the pass (list shrinks; never flashes empty)
+- After the first pass, `/v1/models` lists only models that **passed** (`unknown_as_reachable: false`); those stay advertised until they fail on a later probe cycle
 - Persists probe results to SQLite so Fly.io cold starts keep the available-only list instead of flashing the full catalog
 - Skips loopback `ollama` / `lmstudio` base URLs during probes so remote deploys finish the pass
 - Exposes status on `GET /api/models` and `GET /api/models/status`
 - Use `GET /api/models?include_unreachable=true` to list hidden models with their status
 - Legacy `NOVEXA_*` environment variables are accepted as aliases for `CONDUCTOR_*`
+- Default Fly deploy uses this dynamic + probe path (`catalog.curated_only` off)
 
 | Field | Description | Default |
 |-------|-------------|---------|
