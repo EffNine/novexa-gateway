@@ -22,7 +22,7 @@ func TestModelStatusPersistenceRoundTrip(t *testing.T) {
 		t.Fatalf("Connect: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	if err := db.Migrate(); err != nil {
+	if err = db.Migrate(); err != nil {
 		t.Fatalf("Migrate: %v", err)
 	}
 
