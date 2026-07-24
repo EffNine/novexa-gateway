@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -146,5 +147,64 @@ func TestBackoffRetryPassProbesDueModels(t *testing.T) {
 	prober.ProbeModelsNeedingRetry()
 	if st := store.Get("openai/x"); st == nil || st.State != health.StateHealthy {
 		t.Fatalf("expected healthy after retry, got %+v", st)
+	}
+}
+
+func TestBackoffRetryPassProbesAllDueModels(t *testing.T) {
+	// Regression: with go 1.21 loop semantics, closing over the loop-scoped
+	// entry caused every retry goroutine to probe only the last model.
+	var hits sync.Map
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
+			_ = json.NewEncoder(w).Encode(apitypes.ModelList{
+				Object: "list",
+				Data: []apitypes.ModelInfo{
+					{ID: "a", Object: "model"},
+					{ID: "b", Object: "model"},
+					{ID: "c", Object: "model"},
+				},
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/chat/completions":
+			var req apitypes.ChatCompletionRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			hits.Store(req.Model, true)
+			_ = json.NewEncoder(w).Encode(apitypes.ChatCompletionResponse{
+				ID: "1", Object: "chat.completion",
+				Choices: []apitypes.Choice{{Index: 0, Message: &apitypes.Message{Role: "assistant", Content: "ok"}}},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	reg := provider.NewRegistry()
+	reg.Register(newProbeTestProvider("openai", srv.URL+"/v1"))
+	store := health.NewModelStatusStore(1, true)
+	store.SetBackoff(config.ProbeBackoffConfig{
+		Enabled: true, InitialDelay: time.Millisecond, MaxDelay: time.Second, Multiplier: 2, JitterFraction: 0.01,
+	})
+	for _, id := range []string{"a", "b", "c"} {
+		store.RecordFailure("openai/"+id, "openai", id, "model not found", http.StatusNotFound)
+	}
+	time.Sleep(5 * time.Millisecond)
+
+	cat := catalog.New(reg, nil)
+	prober := health.NewModelProber(cat, reg, store, zap.NewNop(), config.ModelHealthConfig{
+		Enabled: true, Timeout: 2 * time.Second, Concurrency: 3, Providers: []string{"openai"},
+		Backoff: config.ProbeBackoffConfig{
+			Enabled: true, InitialDelay: time.Millisecond, MaxDelay: time.Second, Multiplier: 2, JitterFraction: 0.01,
+		},
+	})
+	prober.ProbeModelsNeedingRetry()
+
+	for _, id := range []string{"a", "b", "c"} {
+		if _, ok := hits.Load(id); !ok {
+			t.Fatalf("expected retry probe for model %q", id)
+		}
+		if st := store.Get("openai/" + id); st == nil || st.State != health.StateHealthy {
+			t.Fatalf("model %s state=%v", id, st)
+		}
 	}
 }

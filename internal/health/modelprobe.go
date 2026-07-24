@@ -27,6 +27,7 @@ type ModelProber struct {
 	stopCh         chan struct{}
 	wg             sync.WaitGroup
 	probing        sync.Mutex
+	retrying       sync.Mutex
 	batcher        *CatalogBatcher
 	errorTracker   *ErrorTracker
 }
@@ -129,37 +130,53 @@ func (p *ModelProber) Start() {
 	if p.batcher != nil {
 		p.batcher.Start()
 	}
+	scope := "all providers"
+	if len(p.providerFilter) > 0 {
+		names := make([]string, 0, len(p.providerFilter))
+		for name := range p.providerFilter {
+			names = append(names, name)
+		}
+		scope = "providers=" + strings.Join(names, ",")
+	}
+	p.logger.Info("model probe: starting",
+		zap.String("scope", scope),
+		zap.Duration("interval", p.cfg.CheckInterval),
+		zap.Bool("backoff", p.cfg.Backoff.Enabled),
+		zap.Duration("batch_window", p.cfg.CatalogBatchWindow),
+	)
+
+	// Full-pass loop (startup + check_interval). Retries run on a separate
+	// goroutine so backoff re-probes are not blocked for the duration of a
+	// long catalog pass.
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-
-		scope := "all providers"
-		if len(p.providerFilter) > 0 {
-			names := make([]string, 0, len(p.providerFilter))
-			for name := range p.providerFilter {
-				names = append(names, name)
-			}
-			scope = "providers=" + strings.Join(names, ",")
-		}
-		p.logger.Info("model probe: starting",
-			zap.String("scope", scope),
-			zap.Duration("interval", p.cfg.CheckInterval),
-			zap.Bool("backoff", p.cfg.Backoff.Enabled),
-			zap.Duration("batch_window", p.cfg.CatalogBatchWindow),
-		)
 
 		// Initial pass on startup/redeploy so /v1/models reflects reachability quickly.
 		p.ProbeAll()
 
 		fullTicker := time.NewTicker(p.cfg.CheckInterval)
 		defer fullTicker.Stop()
-		retryTicker := time.NewTicker(p.cfg.RetryInterval)
-		defer retryTicker.Stop()
 
 		for {
 			select {
 			case <-fullTicker.C:
 				p.ProbeAll()
+			case <-p.stopCh:
+				return
+			}
+		}
+	}()
+
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+
+		retryTicker := time.NewTicker(p.cfg.RetryInterval)
+		defer retryTicker.Stop()
+
+		for {
+			select {
 			case <-retryTicker.C:
 				p.ProbeModelsNeedingRetry()
 			case <-p.stopCh:
@@ -240,14 +257,15 @@ func (p *ModelProber) ProbeAll() {
 }
 
 // ProbeModelsNeedingRetry re-probes models whose backoff NextProbeTime has elapsed.
+// Runs independently of ProbeAll so long catalog passes do not delay backoff.
 func (p *ModelProber) ProbeModelsNeedingRetry() {
 	if p.store == nil || !p.cfg.Backoff.Enabled {
 		return
 	}
-	if !p.probing.TryLock() {
+	if !p.retrying.TryLock() {
 		return
 	}
-	defer p.probing.Unlock()
+	defer p.retrying.Unlock()
 
 	due := p.store.ModelsNeedingRetry(time.Now().UTC())
 	if len(due) == 0 {
@@ -267,11 +285,11 @@ func (p *ModelProber) ProbeModelsNeedingRetry() {
 		}
 		wg.Add(1)
 		sem <- struct{}{}
-		go func() {
+		go func(entry catalog.Entry) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			p.ProbeModel(entry)
-		}()
+		}(entry)
 	}
 	wg.Wait()
 	p.logger.Debug("model probe: backoff retry pass complete", zap.Int("retried", len(due)))
@@ -308,6 +326,13 @@ func (p *ModelProber) ForceProbe(modelID string) (prev, next *ModelStatus, err e
 	if !p.shouldProbe(providerName) {
 		return prev, nil, errors.New("provider is not in probe scope")
 	}
+
+	// Serialize with full-pass and retry waves so a concurrent ApplyBatch cannot
+	// overwrite this synchronous result with a stale in-flight probe outcome.
+	p.probing.Lock()
+	defer p.probing.Unlock()
+	p.retrying.Lock()
+	defer p.retrying.Unlock()
 
 	entry := catalog.Entry{
 		ModelID:         modelID,
@@ -453,11 +478,9 @@ func (p *ModelProber) RecordLiveResult(modelID, providerName, providerModelID st
 	}
 
 	success := err == nil
-	if p.errorTracker != nil && p.errorTracker.Enabled() {
-		p.errorTracker.RecordRequest(modelID, providerName, providerModelID, success)
-	}
-
 	if success {
+		// Apply reachability success first (clears ErrorRate), then refresh the
+		// rate from the live window so dashboard fields stay consistent.
 		result := ProbeResult{
 			ModelID:         modelID,
 			Provider:        providerName,
@@ -471,7 +494,14 @@ func (p *ModelProber) RecordLiveResult(modelID, providerName, providerModelID st
 		} else {
 			p.store.ApplyBatch([]ProbeResult{result})
 		}
+		if p.errorTracker != nil && p.errorTracker.Enabled() {
+			p.errorTracker.RecordRequest(modelID, providerName, providerModelID, true)
+		}
 		return
+	}
+
+	if p.errorTracker != nil && p.errorTracker.Enabled() {
+		p.errorTracker.RecordRequest(modelID, providerName, providerModelID, false)
 	}
 	statusCode, msg := classifyProbeError(err)
 	if IsNeutralProbeFailure(statusCode, msg) || IsInconclusiveProbeFailure(statusCode, msg) {

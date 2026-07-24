@@ -84,6 +84,25 @@ func TestDegradedThresholdTransition(t *testing.T) {
 	}
 }
 
+func TestSuccessClearsStaleErrorRate(t *testing.T) {
+	store := health.NewModelStatusStore(1, true)
+	store.RecordSuccess("openai/gpt", "openai", "gpt", 10)
+	store.UpdateErrorRate("openai/gpt", "openai", "gpt", 0.20, 0.15, 0.05)
+	if st := store.Get("openai/gpt"); st == nil || st.State != health.StateDegraded || st.ErrorRate != 0.20 {
+		t.Fatalf("setup degraded: %+v", store.Get("openai/gpt"))
+	}
+
+	// Probe/live success must not leave a healthy model advertising a stale rate.
+	store.RecordSuccess("openai/gpt", "openai", "gpt", 12)
+	st := store.Get("openai/gpt")
+	if st == nil || st.State != health.StateHealthy {
+		t.Fatalf("expected healthy, got %+v", st)
+	}
+	if st.ErrorRate != 0 {
+		t.Fatalf("ErrorRate = %v, want 0 after success", st.ErrorRate)
+	}
+}
+
 func TestErrorRateWindow(t *testing.T) {
 	store := health.NewModelStatusStore(1, true)
 	et := health.NewErrorTracker(config.ErrorTrackingConfig{

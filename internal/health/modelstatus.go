@@ -255,6 +255,7 @@ func (s *ModelStatusStore) applySuccessLocked(modelID, provider, providerModelID
 	st.CheckedAt = time.Now().UTC()
 	st.ConsecutiveFails = 0
 	st.NextProbeTime = time.Time{}
+	st.ErrorRate = 0
 	return st
 }
 
