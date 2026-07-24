@@ -104,6 +104,9 @@ func thinkingDesired(req *apitypes.ChatCompletionRequest) (enabled bool, effort 
 		effort = mapNIMReasoningEffort(req.ReasoningEffort)
 	} else if req.Reasoning != nil && req.Reasoning.Effort != "" {
 		effort = mapNIMReasoningEffort(req.Reasoning.Effort)
+	} else if req.Reasoning != nil && req.Reasoning.Enabled != nil && !*req.Reasoning.Enabled {
+		// Documented OpenAI-style disable when effort fields are unset.
+		return false, "none"
 	} else if req.ChatTemplateKwargs != nil {
 		if v, ok := req.ChatTemplateKwargs["reasoning_effort"].(string); ok && v != "" {
 			effort = mapNIMReasoningEffort(v)

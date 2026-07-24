@@ -382,6 +382,49 @@ func TestChatCompletionDeepSeekV4RespectsNoneEffort(t *testing.T) {
 	}
 }
 
+func TestChatCompletionRespectsReasoningEnabledFalse(t *testing.T) {
+	enabled := false
+	cases := []struct {
+		name  string
+		model string
+		key   string
+	}{
+		{name: "glm", model: "z-ai/glm5", key: "enable_thinking"},
+		{name: "qwen3", model: "qwen/qwen3-235b-a22b", key: "enable_thinking"},
+		{name: "kimi", model: "moonshotai/kimi-k2.6", key: "thinking"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotBody map[string]any
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&gotBody)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(apitypes.ChatCompletionResponse{
+					ID: "1", Object: "chat.completion", Model: tc.model,
+					Choices: []apitypes.Choice{{
+						Index: 0, Message: &apitypes.Message{Role: "assistant", Content: "ok"}, FinishReason: str("stop"),
+					}},
+				})
+			}))
+			defer server.Close()
+
+			p := nvidianim.NewProvider("test-key", server.URL, 10*time.Second)
+			_, err := p.ChatCompletion(context.Background(), &apitypes.ChatCompletionRequest{
+				Model:     tc.model,
+				Messages:  []apitypes.Message{{Role: "user", Content: "hi"}},
+				Reasoning: &apitypes.ReasoningConfig{Enabled: &enabled},
+			})
+			if err != nil {
+				t.Fatalf("ChatCompletion: %v", err)
+			}
+			kwargs, _ := gotBody["chat_template_kwargs"].(map[string]any)
+			if kwargs[tc.key] != false {
+				t.Fatalf("%s = %v, want false (kwargs=%v)", tc.key, kwargs[tc.key], kwargs)
+			}
+		})
+	}
+}
+
 func TestChatCompletionDeepSeekV4PreservesClientKwargs(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
