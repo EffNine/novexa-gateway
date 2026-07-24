@@ -114,10 +114,8 @@ func applyDeepSeekV4ChatTemplate(req *apitypes.ChatCompletionRequest) {
 	req.ChatTemplateKwargs = kwargs
 
 	// Top-level reasoning_effort is what NVIDIA's API snippets document; keep it
-	// aligned so either translation path works.
-	if req.ReasoningEffort == "" {
-		req.ReasoningEffort = effort
-	}
+	// aligned with the mapped NIM value so either translation path works.
+	req.ReasoningEffort = effort
 }
 
 func nvidiaNimPricing(ctx context.Context) (map[string]provider.PricingInfo, error) {
