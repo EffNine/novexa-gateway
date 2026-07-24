@@ -33,9 +33,9 @@ func (p *Provider) ChatCompletionStream(ctx context.Context, req *apitypes.ChatC
 }
 
 // prepareChatRequest returns a shallow copy shaped for NVIDIA NIM:
-// - remaps OpenAI "developer" role to "system" (NIM 500s with chat_template_kwargs)
-// - injects chat_template_kwargs for DeepSeek V4 so reasoning streams instead of
-//   hanging / returning empty content when clients omit the field (e.g. OpenCode)
+//   - remaps OpenAI "developer" role to "system" (NIM 500s with chat_template_kwargs)
+//   - injects chat_template_kwargs for DeepSeek V4 so reasoning streams instead of
+//     hanging / returning empty content when clients omit the field (e.g. OpenCode)
 func prepareChatRequest(req *apitypes.ChatCompletionRequest) *apitypes.ChatCompletionRequest {
 	if req == nil {
 		return nil

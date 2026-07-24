@@ -187,8 +187,8 @@ func TestChatCompletionInjectsDeepSeekV4ChatTemplateKwargs(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(apitypes.ChatCompletionResponse{
 			ID: "1", Object: "chat.completion", Model: "deepseek-ai/deepseek-v4-flash",
 			Choices: []apitypes.Choice{{
-				Index: 0,
-				Message: &apitypes.Message{Role: "assistant", Content: "ok", ReasoningContent: "plan"},
+				Index:        0,
+				Message:      &apitypes.Message{Role: "assistant", Content: "ok", ReasoningContent: "plan"},
 				FinishReason: str("stop"),
 			}},
 		})
@@ -348,4 +348,3 @@ func TestChatCompletionStreamInjectsDeepSeekV4ChatTemplateKwargs(t *testing.T) {
 }
 
 func str(s string) *string { return &s }
-
